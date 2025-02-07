@@ -177,7 +177,9 @@ MIT License
 ## 作者
 
 - Owner: weidwonder  
-- Coder: Claude Sonnet 3.5 【100% Code wrote by Claude. Cost: $9 ($7 cost for Debug😭)】
+- Coder: Claude Sonnet 3.5 
+    - 100% Code wrote by Claude. Cost: $9 ($7 cost for Debuging😭)
+    - 3 hours time cost. 0.5 hours for code writing, 0.5 hours for env preparing, 2 hourse for debuging.😭
 
 ## 致谢
 
