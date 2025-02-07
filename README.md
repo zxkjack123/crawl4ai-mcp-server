@@ -97,7 +97,8 @@ MIT License
 
 ## 作者
 
-[Your Name]
+PM: weidwonder
+Coder: Claude Sonnet 3.5
 
 ## 致谢
 
