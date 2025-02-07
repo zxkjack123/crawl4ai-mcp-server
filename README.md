@@ -1,14 +1,14 @@
 # Crawl4AI MCP Server
 
-这是一个基于MCP (Model Context Protocol)的网页爬虫服务器,提供高效的网页内容抓取和转换功能。该服务器专门设计用于AI助手系统,能够将网页内容转换为多种格式,优化后用于上下文输入。
+这是一个基于MCP (Model Context Protocol)的智能信息获取服务器,为AI助手系统提供强大的搜索能力和面向LLM优化的网页内容理解功能。通过多引擎搜索和智能内容提取,帮助AI系统高效获取和理解互联网信息,将网页内容转换为最适合LLM处理的格式。
 
 ## 特性
 
-- 🚀 基于FastMCP实现的高性能服务器
-- 🎯 智能内容过滤,专注于核心内容
-- 📝 多种输出格式支持
-- 🔗 保留引用完整性
-- 🛠 异步操作设计
+- 🔍 强大的多引擎搜索能力,支持DuckDuckGo和Google
+- 📚 面向LLM优化的网页内容提取,智能过滤非核心内容
+- 🎯 专注信息价值,自动识别和保留关键内容
+- 📝 多种输出格式,支持引用溯源
+- 🚀 基于FastMCP的高性能异步设计
 
 ## 安装
 
@@ -44,13 +44,44 @@ playwright install
 
 服务器提供以下工具:
 
-### read_url
-网页内容抓取工具,支持以下输出格式:
+### search
+强大的网络搜索工具,支持多个搜索引擎:
 
+- DuckDuckGo搜索(默认): 无需API密钥,全面处理AbstractText、Results和RelatedTopics
+- Google搜索: 需要配置API密钥,提供精准搜索结果
+- 支持同时使用多个引擎获取更全面的结果
+
+参数说明:
+- `query`: 搜索查询字符串
+- `num_results`: 返回结果数量(默认10)
+- `engine`: 搜索引擎选择
+  - "duckduckgo": DuckDuckGo搜索(默认)
+  - "google": Google搜索(需要API密钥)
+  - "all": 同时使用所有可用的搜索引擎
+
+示例:
+```python
+# DuckDuckGo搜索(默认)
+{
+    "query": "python programming",
+    "num_results": 5
+}
+
+# 使用所有可用引擎
+{
+    "query": "python programming",
+    "num_results": 5,
+    "engine": "all"
+}
+```
+
+### read_url
+面向LLM优化的网页内容理解工具,提供智能内容提取和格式转换:
+
+- `markdown_with_citations`: 包含内联引用的Markdown(默认),保持信息溯源
+- `fit_markdown`: 经过LLM优化的精简内容,去除冗余信息
 - `raw_markdown`: 基础HTML→Markdown转换
-- `markdown_with_citations`: 包含内联引用的Markdown(默认)
-- `references_markdown`: 引用/参考文献部分
-- `fit_markdown`: 经过内容过滤的Markdown
+- `references_markdown`: 单独的引用/参考文献部分
 - `fit_html`: 生成fit_markdown的过滤后HTML
 - `markdown`: 默认Markdown格式
 
@@ -61,19 +92,6 @@ playwright install
     "format": "markdown_with_citations"
 }
 ```
-
-### search
-网络搜索工具,支持多个搜索引擎:
-
-- DuckDuckGo搜索(默认)
-- Google搜索(需要配置API密钥)
-
-参数说明:
-- `query`: 搜索查询字符串
-- `num_results`: 返回结果数量(默认10)
-- `engine`: 搜索引擎选择
-  - "duckduckgo": DuckDuckGo搜索(默认)
-  - "google": Google搜索(需要API密钥)
 
 示例:
 ```python
@@ -101,14 +119,15 @@ playwright install
 }
 ```
 
-## 内容优化配置
+## LLM内容优化
 
-服务器采用了以下优化配置以提供更好的内容质量:
+服务器采用了一系列针对LLM的内容优化策略:
 
-- 最小词数阈值:10
-- 自动排除导航栏、页脚、页眉等非核心内容
-- 启用引用保留以保持URL信息完整性
-- 默认使用 markdown_with_citations 格式输出
+- 智能内容识别: 自动识别并保留文章主体、关键信息段落
+- 噪音过滤: 自动过滤导航栏、广告、页脚等对理解无帮助的内容
+- 信息完整性: 保留URL引用,支持信息溯源
+- 长度优化: 使用最小词数阈值(10)过滤无效片段
+- 格式优化: 默认输出markdown_with_citations格式,便于LLM理解和引用
 
 ## 开发说明
 
@@ -163,3 +182,6 @@ Coder: Claude Sonnet 3.5
 ## 致谢
 
 感谢所有为项目做出贡献的开发者!
+
+特别感谢:
+- [Crawl4ai](https://github.com/crawl4ai/crawl4ai) 项目提供的优秀网页内容提取技术支持
