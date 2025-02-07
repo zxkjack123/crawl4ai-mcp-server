@@ -176,8 +176,8 @@ MIT License
 
 ## 作者
 
-PM: weidwonder
-Coder: Claude Sonnet 3.5
+- Owner: weidwonder  
+- Coder: Claude Sonnet 3.5 【100% Code wrote by Claude. Cost: $9 ($7 cost for Debug😭)】
 
 ## 致谢
 
