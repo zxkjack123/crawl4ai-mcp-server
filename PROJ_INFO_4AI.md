@@ -10,15 +10,24 @@
 
 ## 功能说明
 
-服务器提供了一个主要工具:
+服务器提供以下工具:
 
-- `read_url`: 爬取指定URL的网页内容,支持多种输出格式:
-  - raw_markdown: 基础HTML→Markdown转换
-  - markdown_with_citations: 包含内联引用的Markdown
-  - references_markdown: 引用/参考文献部分
-  - fit_markdown: 经过内容过滤的Markdown
-  - fit_html: 生成fit_markdown的过滤后HTML
-  - markdown: 默认Markdown格式
+1. `read_url`: 爬取指定URL的网页内容,支持多种输出格式:
+   - raw_markdown: 基础HTML→Markdown转换
+   - markdown_with_citations: 包含内联引用的Markdown
+   - references_markdown: 引用/参考文献部分
+   - fit_markdown: 经过内容过滤的Markdown
+   - fit_html: 生成fit_markdown的过滤后HTML
+   - markdown: 默认Markdown格式
+
+2. `search`: 执行网络搜索并返回结果
+   - 支持多个搜索引擎:
+     * DuckDuckGo: 无需API密钥,处理AbstractText、Results和RelatedTopics
+     * Google: 需要配置API密钥和CSE ID
+   - 参数说明:
+     * query: 搜索查询字符串
+     * num_results: 返回结果数量(默认10)
+     * engine: 使用的搜索引擎(all/duckduckgo/google)
 
 ## 环境要求
 
@@ -45,5 +54,6 @@
 
 ## 更新历史
 
+- 2025.02.08: 优化DuckDuckGo搜索实现,增强结果收集能力
 - 2025.02.07: 重构项目结构,使用FastMCP实现,优化依赖管理
 - 2025.02.07: 优化内容过滤配置,提高token效率并保持URL完整性

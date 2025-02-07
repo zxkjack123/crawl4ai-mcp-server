@@ -42,7 +42,10 @@ playwright install
 
 ## 使用方法
 
-服务器提供了一个主要工具 `read_url`,支持以下输出格式:
+服务器提供以下工具:
+
+### read_url
+网页内容抓取工具,支持以下输出格式:
 
 - `raw_markdown`: 基础HTML→Markdown转换
 - `markdown_with_citations`: 包含内联引用的Markdown(默认)
@@ -51,13 +54,50 @@ playwright install
 - `fit_html`: 生成fit_markdown的过滤后HTML
 - `markdown`: 默认Markdown格式
 
-### 示例
-
+示例:
 ```python
-# MCP工具调用示例
 {
     "url": "https://example.com",
     "format": "markdown_with_citations"
+}
+```
+
+### search
+网络搜索工具,支持多个搜索引擎:
+
+- DuckDuckGo搜索(默认)
+- Google搜索(需要配置API密钥)
+
+参数说明:
+- `query`: 搜索查询字符串
+- `num_results`: 返回结果数量(默认10)
+- `engine`: 搜索引擎选择
+  - "duckduckgo": DuckDuckGo搜索(默认)
+  - "google": Google搜索(需要API密钥)
+
+示例:
+```python
+# DuckDuckGo搜索(默认)
+{
+    "query": "python programming",
+    "num_results": 5
+}
+
+# Google搜索
+{
+    "query": "python programming",
+    "num_results": 5,
+    "engine": "google"
+}
+```
+
+如需使用Google搜索,需要在config.json中配置API密钥:
+```json
+{
+    "google": {
+        "api_key": "your-api-key",
+        "cse_id": "your-cse-id"
+    }
 }
 ```
 
@@ -76,14 +116,34 @@ playwright install
 ```
 crawl4ai_mcp_server/
 ├── src/
-│   └── index.py      # 服务器主实现
+│   ├── index.py      # 服务器主实现
+│   └── search.py     # 搜索功能实现
+├── config_demo.json  # 配置文件示例
 ├── pyproject.toml    # 项目配置
 ├── requirements.txt  # 依赖列表
 └── README.md        # 项目文档
 ```
 
+## 配置说明
+
+1. 复制配置示例文件:
+```bash
+cp config_demo.json config.json
+```
+
+2. 如需使用Google搜索,在config.json中配置API密钥:
+```json
+{
+    "google": {
+        "api_key": "your-google-api-key",
+        "cse_id": "your-google-cse-id"
+    }
+}
+```
+
 ## 更新日志
 
+- 2025.02.08: 添加搜索功能,支持DuckDuckGo(默认)和Google搜索
 - 2025.02.07: 重构项目结构,使用FastMCP实现,优化依赖管理
 - 2025.02.07: 优化内容过滤配置,提高token效率并保持URL完整性
 
