@@ -14,13 +14,7 @@
 
 ## 安装
 
-### 安装到Claude桌面客户端 via Smithery
-
-通过 [Smithery](https://smithery.ai/server/@weidwonder/crawl4ai-mcp-server) 将 Crawl4AI MCP 的 Claude 桌面端服务安装自动配置至您本地的 `Claude 伸展中心`:
-
-```bash
-npx -y @smithery/cli install @weidwonder/crawl4ai-mcp-server --client claude
-```
+### 方式1: 大部分的安装场景
 
 1. 确保您的系统满足以下要求:
    - Python >= 3.9
@@ -48,6 +42,14 @@ pip install -r requirements.txt
 5. 安装playwright浏览器:
 ```bash
 playwright install
+```
+
+### 方式2: 安装到Claude桌面客户端 via Smithery
+
+通过 [Smithery](https://smithery.ai/server/@weidwonder/crawl4ai-mcp-server) 将 Crawl4AI MCP 的 Claude 桌面端服务安装自动配置至您本地的 `Claude 伸展中心`:
+
+```bash
+npx -y @smithery/cli install @weidwonder/crawl4ai-mcp-server --client claude
 ```
 
 ## 使用方法
@@ -188,8 +190,8 @@ MIT License
 
 - Owner: weidwonder  
 - Coder: Claude Sonnet 3.5 
-    - 100% Code wrote by Claude. Cost: $9 ($7 cost for Debuging😭)
-    - 3 hours time cost. 0.5 hours for code writing, 0.5 hours for env preparing, 2 hourse for debuging.😭
+    - 100% Code wrote by Claude. Cost: $9 ($2 for code writing, $7 cost for Debuging😭)
+    - 3 hours time cost. 0.5 hours for code writing, 0.5 hours for env preparing, 2 hours for debuging.😭
 
 ## 致谢
 
