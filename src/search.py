@@ -165,7 +165,7 @@ class SearchManager:
             except Exception as e:
                 print(f"Failed to load Google search configuration: {e}")
                 
-    async def search(self, query: str, num_results: int = 10, engine: str = "all") -> List[Dict]:
+    async def search(self, query: str, num_results: int = 10, engine: str = "duckduckgo") -> List[Dict]:
         all_results = []
         
         if not self.engines:
@@ -183,9 +183,10 @@ class SearchManager:
             else:
                 engine_type = engine_name
                 
-            if engine_type != engine.lower():
-                logger.debug(f"Skipping {engine_name} as it doesn't match requested engine: {engine}")
-                continue
+            if engine.lower() != "all":
+                if engine_type != engine.lower():
+                    logger.debug(f"Skipping {engine_name} as it doesn't match requested engine: {engine}")
+                    continue
                 
             try:
                 results = await search_engine.search(query, num_results)

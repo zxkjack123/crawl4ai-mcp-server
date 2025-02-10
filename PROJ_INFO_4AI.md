@@ -19,9 +19,9 @@
    - 参数说明:
      * query: 搜索查询字符串
      * num_results: 返回结果数量(默认10)
-     * engine: 搜索引擎选择(all/duckduckgo/google)
+     * engine: 搜索引擎选择(duckduckgo/google)
    - 特点:
-     * 支持同时使用多个引擎获取更全面的结果
+     * 支持选择特定搜索引擎
      * 智能结果整合和排序
 
 2. `read_url`: 面向LLM优化的网页内容理解工具
