@@ -4,8 +4,10 @@ import json
 import os
 import logging
 from abc import ABC, abstractmethod
+from duckduckgo_search import DDGS
 
 logger = logging.getLogger(__name__)
+
 class SearchResult:
     def __init__(self, title: str, link: str, snippet: str, source: str):
         self.title = title
@@ -28,77 +30,35 @@ class SearchEngine(ABC):
 
 class DuckDuckGoSearch(SearchEngine):
     def __init__(self):
-        self.base_url = "https://api.duckduckgo.com"
+        self.ddgs = DDGS()
         
     async def search(self, query: str, num_results: int = 10) -> List[SearchResult]:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                params = {
-                    'q': query,
-                    'format': 'json',
-                    'no_html': 1,
-                    'no_redirect': 1,
-                    't': 'D' # 使用默认主题
-                }
-                
-                logger.info(f"Sending request to DuckDuckGo: {query}")
-                logger.info(f"Request URL: {self.base_url}")
-                logger.info(f"Request params: {params}")
-                
-                response = await client.get(self.base_url, params=params)
-                logger.info(f"Response status: {response.status_code}")
-                logger.info(f"Response headers: {response.headers}")
-                response.raise_for_status()
-                data = response.json()
-                logger.info("DuckDuckGo search request successful")
-            except Exception as e:
-                logger.error(f"DuckDuckGo search failed: {str(e)}")
-                return []
+        try:
+            # 使用duckduckgo_search库进行搜索
+            # 设置region为wt-wt(全球),safesearch为moderate(适中)
+            raw_results = self.ddgs.text(
+                keywords=query,
+                region="wt-wt",
+                safesearch="moderate",
+                max_results=num_results
+            )
+            
+            logger.info(f"DuckDuckGo search successful for query: {query}")
             
             results = []
-            
-            # 处理AbstractText作为第一个结果(如果存在)
-            if data.get('AbstractText'):
+            for item in raw_results:
                 results.append(SearchResult(
-                    title=data.get('Heading', ''),
-                    link=data.get('AbstractURL', ''),
-                    snippet=data.get('AbstractText', ''),
+                    title=item.get('title', ''),
+                    link=item.get('href', ''),  # duckduckgo_search使用'href'作为链接字段
+                    snippet=item.get('body', ''),  # duckduckgo_search使用'body'作为摘要字段
                     source='duckduckgo'
                 ))
             
-            # 处理Results字段(如果存在)
-            if data.get('Results'):
-                for r in data.get('Results', []):
-                    if 'Text' in r and 'FirstURL' in r:
-                        results.append(SearchResult(
-                            title=r.get('Text', '').split(' - ')[0],
-                            link=r.get('FirstURL', ''),
-                            snippet=r.get('Text', ''),
-                            source='duckduckgo'
-                        ))
+            return results
             
-            # 处理相关链接
-            for r in data.get('RelatedTopics', []):
-                if isinstance(r, dict) and 'Topics' in r:
-                    # 处理分组的主题
-                    for topic in r['Topics']:
-                        if 'Text' in topic and 'FirstURL' in topic:
-                            results.append(SearchResult(
-                                title=topic.get('Text', '').split(' - ')[0],
-                                link=topic.get('FirstURL', ''),
-                                snippet=topic.get('Text', ''),
-                                source='duckduckgo'
-                            ))
-                elif isinstance(r, dict) and 'Text' in r and 'FirstURL' in r:
-                    # 处理单个主题
-                    results.append(SearchResult(
-                        title=r.get('Text', '').split(' - ')[0],
-                        link=r.get('FirstURL', ''),
-                        snippet=r.get('Text', ''),
-                        source='duckduckgo'
-                    ))
-                    
-            return results[:num_results]
+        except Exception as e:
+            logger.error(f"DuckDuckGo search failed: {str(e)}")
+            return []
 
 class GoogleSearch(SearchEngine):
     def __init__(self, api_key: str, cse_id: str):
