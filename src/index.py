@@ -69,21 +69,49 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
             options={"citations": True}
         )
     )
-    
-    result = await crawler.arun(url=url, config=run_config)
-    
-    if format == "raw_markdown":
-        return result.markdown_v2.raw_markdown
-    elif format == "markdown_with_citations":
-        return result.markdown_v2.markdown_with_citations
-    elif format == "references_markdown":
-        return result.markdown_v2.references_markdown
-    elif format == "fit_markdown":
-        return result.markdown_v2.fit_markdown
-    elif format == "fit_html":
-        return result.markdown_v2.fit_html
-    else:
-        return result.markdown_v2.markdown_with_citations
+
+    try:
+        result = await crawler.arun(url=url, config=run_config)
+        
+        content = None
+        if format == "raw_markdown":
+            content = result.markdown_v2.raw_markdown
+        elif format == "markdown_with_citations":
+            content = result.markdown_v2.markdown_with_citations
+        elif format == "references_markdown":
+            content = result.markdown_v2.references_markdown
+        elif format == "fit_markdown":
+            content = result.markdown_v2.fit_markdown
+        elif format == "fit_html":
+            content = result.markdown_v2.fit_html
+        else:
+            content = result.markdown_v2.markdown_with_citations
+        
+        # 确保内容是UTF-8编码的字符串
+        if content is not None:
+            # 如果内容已经是字符串，确保它是UTF-8编码的
+            if isinstance(content, str):
+                # 在Windows系统上，处理可能的编码问题
+                try:
+                    # 尝试将内容编码为UTF-8，然后解码回字符串
+                    # 这样可以确保内容是有效的UTF-8字符串
+                    content = content.encode('utf-8', errors='replace').decode('utf-8')
+                except Exception as e:
+                    print(f"Warning: Error handling content encoding: {str(e)}")
+            else:
+                # 如果内容不是字符串，尝试将其转换为字符串
+                try:
+                    content = str(content)
+                    content = content.encode('utf-8', errors='replace').decode('utf-8')
+                except Exception as e:
+                    print(f"Warning: Error converting content to string: {str(e)}")
+                    content = f"Error: Could not convert content to string: {str(e)}"
+        
+        return content
+    except Exception as e:
+        error_msg = f"Error crawling URL: {str(e)}"
+        print(error_msg)
+        return json.dumps({"error": error_msg}, ensure_ascii=False)
 
 @mcp.tool()
 async def search(query: str, num_results: int = 10, engine: str = "duckduckgo") -> str:
@@ -100,17 +128,29 @@ async def search(query: str, num_results: int = 10, engine: str = "duckduckgo") 
     try:
         await initialize_search_manager()
         if not search_manager or not search_manager.engines:
-            return json.dumps({"error": "No search engines available"})
+            return json.dumps({"error": "No search engines available"}, ensure_ascii=False)
             
         results = await search_manager.search(query, num_results, engine)
         print(f"Search results: {results}")  # 添加调试日志
         
-        # 直接返回字符串
-        return json.dumps(results, ensure_ascii=False, indent=2)
+        # 确保JSON字符串是UTF-8编码的
+        try:
+            json_str = json.dumps(results, ensure_ascii=False, indent=2)
+            # 在Windows系统上，处理可能的编码问题
+            json_str = json_str.encode('utf-8', errors='replace').decode('utf-8')
+            return json_str
+        except Exception as e:
+            error_msg = f"Error encoding search results: {str(e)}"
+            print(error_msg)
+            return json.dumps({"error": error_msg}, ensure_ascii=False)
     except Exception as e:
         error_msg = f"Search error: {str(e)}"
         print(error_msg)  # 添加错误日志
-        return json.dumps({"error": error_msg})
+        try:
+            return json.dumps({"error": error_msg}, ensure_ascii=False)
+        except Exception as json_e:
+            # 如果JSON序列化失败，返回简单的错误消息
+            return f"Error: {error_msg}. JSON encoding failed: {str(json_e)}"
 
 async def cleanup():
     await close_crawler()
