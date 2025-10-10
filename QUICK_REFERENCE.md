@@ -45,11 +45,11 @@ python tests/test_google_api_direct.py
 
 ## 📖 常用文档
 
-| 文档 | 说明 |
-|------|------|
-| [README.md](README.md) | 项目介绍 |
-| [docs/QUICK_START.md](docs/QUICK_START.md) | 快速开始 |
-| [examples/CONFIG.md](examples/CONFIG.md) | 配置说明 |
+| 文档                                         | 说明     |
+| -------------------------------------------- | -------- |
+| [README.md](README.md)                       | 项目介绍 |
+| [docs/QUICK_START.md](docs/QUICK_START.md)   | 快速开始 |
+| [examples/CONFIG.md](examples/CONFIG.md)     | 配置说明 |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | 结构说明 |
 
 ---
