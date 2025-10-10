@@ -6,13 +6,18 @@
 import asyncio
 import httpx
 import json
+import sys
 from pathlib import Path
+
+# 添加父目录到路径以导入 test_utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from tests.test_utils import get_config_path
 
 async def test_google_api():
     """直接测试 Google Custom Search API"""
     
     # 从 config.json 读取配置
-    config_path = Path(__file__).parent / "config.json"
+    config_path = get_config_path()
     with open(config_path, 'r') as f:
         config = json.load(f)
     

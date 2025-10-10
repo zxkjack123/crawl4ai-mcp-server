@@ -38,5 +38,17 @@ env/
 *.log
 logs/
 
-# Config
+# Config - 包含隐私信息
 config.json
+config_demo.json
+
+# Test outputs - 可能包含敏感数据
+output/
+*_results.json
+*_output.json
+*_output.md
+
+# Cache
+.mypy_cache/
+.pytest_cache/
+*.pyc

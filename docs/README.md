@@ -14,37 +14,9 @@
 - 📝 多种输出格式,支持引用溯源
 - 🚀 基于FastMCP的高性能异步设计
 
-## 项目结构
+## 安装
 
-```
-crawl4ai-mcp-server/
-├── src/                    # 源代码
-│   ├── index.py           # MCP 服务器入口
-│   └── search.py          # 搜索引擎管理
-├── tests/                  # 测试脚本
-│   ├── test_google_api_direct.py
-│   ├── test_dual_engines.py
-│   └── test_comprehensive.py
-├── docs/                   # 完整文档
-│   ├── DEPLOYMENT_GUIDE.md
-│   ├── VSCODE_INTEGRATION.md
-│   ├── CHERRY_STUDIO_INTEGRATION.md
-│   ├── GOOGLE_API_SETUP_CN.md
-│   └── ...
-├── examples/               # 配置示例
-│   ├── config.example.json
-│   └── CONFIG.md
-├── output/                 # 测试输出（不提交）
-├── config.json            # 实际配置（不提交）
-├── pyproject.toml         # 项目配置
-└── README.md              # 本文件
-```
-
-## 快速开始
-
-### 1. 安装
-
-#### 方式1: 大部分的安装场景
+### 方式1: 大部分的安装场景
 
 1. 确保您的系统满足以下要求:
    - Python >= 3.9
@@ -72,37 +44,6 @@ pip install -r requirements.txt
 5. 安装playwright浏览器:
 ```bash
 playwright install
-```
-
-### 2. 配置
-
-#### 复制并编辑配置文件
-
-```bash
-# 复制示例配置
-cp examples/config.example.json config.json
-
-# 编辑配置文件
-nano config.json
-```
-
-#### 配置 Google API（可选）
-
-如果需要使用 Google 搜索引擎，请参考以下文档：
-
-- 📖 [Google API 配置指南](docs/GOOGLE_API_SETUP_CN.md) - 详细中文教程
-- 📖 [配置说明](examples/CONFIG.md) - 快速配置指南
-
-**注意**: DuckDuckGo 搜索引擎无需配置即可使用。
-
-### 3. 运行测试
-
-```bash
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 测试搜索功能
-python tests/test_comprehensive.py
 ```
 
 ### 方式2: 安装到Claude桌面客户端 via Smithery
