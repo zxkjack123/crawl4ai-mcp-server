@@ -1,0 +1,98 @@
+{
+  "Google Cloud Console Custom Search API key tutorial": [
+    {
+      "title": "Google",
+      "link": "https://www.google.com/",
+      "snippet": "Search the world's information, including webpages, images, videos and more. Google has many special features to help you find exactly what you're looking for.",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Sign in - Google Accounts",
+      "link": "https://accounts.google.com/",
+      "snippet": "Not your computer? Use a private browsing window to sign in. Learn more about using Guest mode",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Google Maps",
+      "link": "https://maps.google.com/",
+      "snippet": "Find local businesses, view maps and get driving directions in Google Maps.",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Google Images",
+      "link": "https://images.google.com.sg/",
+      "snippet": "Google Images. The most comprehensive image search on the web.",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Gmail - Google",
+      "link": "https://www.google.com.nf/webhp?hl=en&tab=ii",
+      "snippet": "Search the world's information, including webpages, images, videos and more. Google has many special features to help you find exactly what you're looking for.",
+      "source": "duckduckgo"
+    }
+  ],
+  "get Google Custom Search Engine ID programmable search": [
+    {
+      "title": "Programmable Search Engine ID - Google Help",
+      "link": "https://support.google.com/programmable-search/answer/12499034?hl=en",
+      "snippet": "From the list of search engines, select the search engine for which you want to find the search engine ID. The Search engine ID is in the Basic section or in the jumped out...The Custom Search JSON API lets you develop websites and applications to …Help people find what they need on your website. Add a customizable search box …Programmable Search Engine enables you to create a search engine for your website, …",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Search Engine ID and Google API Key - Coda",
+      "link": "https://coda.io/@jon-dallas/google-image-search-pack-example/search-engine-id-and-google-api-key-3",
+      "snippet": "After creating a PSE, you will receive a unique Search Engine ID. This ID is used to specify which search engine to query. To access and integrate your Programmable Search Engine with …",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Custom Search JSON API | Programmable Search Engine | Google …",
+      "link": "https://developers.google.com/custom-search/v1/overview",
+      "snippet": "",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "How to Create Google Custom Search [Programmable Search …",
+      "link": "https://geekflare.com/guide/create-google-custom-search/",
+      "snippet": "Mar 18, 2025 · You can use Google CSE (Programmable Search Engine) to create custom search experiences for your website users or consolidated search for internal teams. In this post, I’ll …",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "How to Get Google API Key & Custom Search Engine ID (Step-by …",
+      "link": "/videos/riverview/relatedvideo?q=get+Google+Custom+Search+Engine+ID+programmable+search&ru=/search?q=get+Google+Custom+Search+Engine+ID+programmable+search&mmscn=vwrc&mid=ECFCDABE2D4523EA4118ECFCDABE2D4523EA4118&FORM=WRVORC&ntb=1&msockid=21ea54d7a5da11f0a34ce56e50ea2270",
+      "snippet": "Apr 20, 2025 · Learn how to easily get your Google API Key and set up a Custom Search Engine ID (CX) for your projects.",
+      "source": "duckduckgo"
+    }
+  ],
+  "Google CSE API credentials setup guide": [
+    {
+      "title": "Setting up API keys - API Console Help",
+      "link": "https://support.google.com/googleapi/answer/6158862?hl=en",
+      "snippet": "To create your application's API key: Go to the API Console. From the projects list, select a project or create a new one. If the APIs & services page isn't already open, open the left side...",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "REST Resource: users.settings.cse.identities | Gmail | Google for ...",
+      "link": "https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.cse.identities",
+      "snippet": "Jun 12, 2025 · The client-side encryption (CSE) configuration for the email address of an authenticated user. Gmail uses CSE configurations to save drafts of client-side encrypted email …",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Client-side encryption setup overview - Google Help",
+      "link": "https://support.google.com/a/answer/14309952?hl=en",
+      "snippet": "Before you start setting up Google Workspace Client-side encryption (CSE), review the requirements, encryption key options, and setup overview. CSE requirements",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Manage API keys | Authentication | Google Cloud",
+      "link": "https://cloud.google.com/docs/authentication/api-keys",
+      "snippet": "1 day ago · When you use the Google Cloud console to access Google Cloud services and APIs, you don't need to set up authentication. In the Google Cloud console, activate Cloud Shell. At the …",
+      "source": "duckduckgo"
+    },
+    {
+      "title": "Create access credentials | Google Workspace | Google for Developers",
+      "link": "https://developers.google.com/workspace/guides/create-credentials",
+      "snippet": "Aug 28, 2025 · Credentials are used to obtain an access token from Google's authorization servers so your app can call Google Workspace APIs. This guide describes how to choose and set up the...",
+      "source": "duckduckgo"
+    }
+  ]
+}

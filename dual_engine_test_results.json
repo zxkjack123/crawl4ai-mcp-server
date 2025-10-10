@@ -1,0 +1,43 @@
+{
+  "duckduckgo": [],
+  "google": [
+    {
+      "title": "Tutorial - User Guide - FastAPI",
+      "link": "https://fastapi.tiangolo.com/tutorial/",
+      "snippet": "Run the code¶. All the code blocks can be copied and used directly (they are actually tested Python files). To run any of the examples, copy ...",
+      "source": "google"
+    },
+    {
+      "title": "Comprehensive Fast API Tutorial : r/Python",
+      "link": "https://www.reddit.com/r/Python/comments/mwgwmt/comprehensive_fast_api_tutorial/",
+      "snippet": "Apr 22, 2021 ... It seems to cover a lot but some of the key takeaways are best practices, software design patterns, API Authentication via JWT, DB Migrations and of course ...",
+      "source": "google"
+    },
+    {
+      "title": "First Steps - FastAPI",
+      "link": "https://fastapi.tiangolo.com/tutorial/first-steps/",
+      "snippet": "Tutorial - User Guide. First Steps¶. The simplest FastAPI file could look like ... This is a Python function. It will be called by FastAPI whenever it ...",
+      "source": "google"
+    }
+  ],
+  "combined": [
+    {
+      "title": "Tutorial - User Guide - FastAPI",
+      "link": "https://fastapi.tiangolo.com/tutorial/",
+      "snippet": "Run the code¶. All the code blocks can be copied and used directly (they are actually tested Python files). To run any of the examples, copy ...",
+      "source": "google"
+    },
+    {
+      "title": "Comprehensive Fast API Tutorial : r/Python",
+      "link": "https://www.reddit.com/r/Python/comments/mwgwmt/comprehensive_fast_api_tutorial/",
+      "snippet": "Apr 22, 2021 ... It seems to cover a lot but some of the key takeaways are best practices, software design patterns, API Authentication via JWT, DB Migrations and of course ...",
+      "source": "google"
+    },
+    {
+      "title": "First Steps - FastAPI",
+      "link": "https://fastapi.tiangolo.com/tutorial/first-steps/",
+      "snippet": "Tutorial - User Guide. First Steps¶. The simplest FastAPI file could look like ... This is a Python function. It will be called by FastAPI whenever it ...",
+      "source": "google"
+    }
+  ]
+}

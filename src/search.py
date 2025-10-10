@@ -71,7 +71,19 @@ class GoogleSearch(SearchEngine):
             logger.warning("Google search credentials not configured")
             return []
             
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # Use HTTP proxy if available, ignore socks5 proxy
+        import os
+        proxies = None
+        http_proxy = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
+        https_proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+        
+        if http_proxy and http_proxy.startswith('http'):
+            proxies = {
+                "http://": http_proxy,
+                "https://": https_proxy or http_proxy
+            }
+        
+        async with httpx.AsyncClient(timeout=30.0, proxies=proxies) as client:
             try:
                 params = {
                     'key': self.api_key,
