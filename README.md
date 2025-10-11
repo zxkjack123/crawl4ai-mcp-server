@@ -42,51 +42,76 @@ crawl4ai-mcp-server/
 
 ## 快速开始
 
-### 1. 安装
+### 📦 系统要求
 
-#### 方式1: 大部分的安装场景
+- **Python**: 3.9 或更高版本
+- **操作系统**: Linux, macOS, Windows 10/11
+- **磁盘空间**: 至少 500 MB
 
-1. 确保您的系统满足以下要求:
-   - Python >= 3.9
-   - 建议使用专门的虚拟环境
+### 🚀 安装方式
 
-2. 克隆仓库:
-```bash
-git clone https://github.com/yourusername/crawl4ai-mcp-server.git
+#### 🪟 Windows 用户
+
+**快速安装**（推荐）:
+```powershell
+# PowerShell
+git clone https://github.com/zxkjack123/crawl4ai-mcp-server.git
 cd crawl4ai-mcp-server
+.\setup.ps1
+
+# 或使用 CMD
+setup.bat
 ```
 
-3. 创建并激活虚拟环境:
-```bash
-python -m venv crawl4ai_env
-source crawl4ai_env/bin/activate  # Linux/Mac
-# 或
-.\crawl4ai_env\Scripts\activate  # Windows
-```
+📖 **详细指南**: [Windows 安装文档](docs/WINDOWS_INSTALLATION.md)
 
-4. 安装依赖:
+#### 🐧 Linux / 🍎 macOS 用户
+
+**快速安装**:
+
+**快速安装**:
 ```bash
+git clone https://github.com/zxkjack123/crawl4ai-mcp-server.git
+cd crawl4ai-mcp-server
+
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+
+# 安装依赖
 pip install -r requirements.txt
-```
-
-5. 安装playwright浏览器:
-```bash
 playwright install
 ```
 
-### 2. 配置
+#### 🎨 通过 Smithery 安装（Claude 桌面客户端）
 
-#### 复制并编辑配置文件
+#### 🎨 通过 Smithery 安装（Claude 桌面客户端）
+
+通过 [Smithery](https://smithery.ai/server/@weidwonder/crawl4ai-mcp-server) 一键安装：
 
 ```bash
-# 复制示例配置
-cp examples/config.example.json config.json
+npx -y @smithery/cli install @weidwonder/crawl4ai-mcp-server --client claude
+```
 
-# 编辑配置文件
+---
+
+### ⚙️ 配置
+
+#### 1. 复制配置模板
+
+**Linux/macOS**:
+```bash
+cp examples/config.example.json config.json
 nano config.json
 ```
 
-#### 配置 Google API（可选）
+**Windows**:
+```powershell
+copy examples\config.example.json config.json
+notepad config.json
+```
+
+#### 2. 配置 Google API（可选）
 
 如果需要使用 Google 搜索引擎，请参考以下文档：
 
@@ -95,23 +120,46 @@ nano config.json
 
 **注意**: DuckDuckGo 搜索引擎无需配置即可使用。
 
-### 3. 运行测试
+### 🧪 测试
 
+**Linux/macOS**:
 ```bash
-# 激活虚拟环境
 source .venv/bin/activate
-
-# 测试搜索功能
 python tests/test_comprehensive.py
 ```
 
-### 方式2: 安装到Claude桌面客户端 via Smithery
-
-通过 [Smithery](https://smithery.ai/server/@weidwonder/crawl4ai-mcp-server) 将 Crawl4AI MCP 的 Claude 桌面端服务安装自动配置至您本地的 `Claude 伸展中心`:
-
-```bash
-npx -y @smithery/cli install @weidwonder/crawl4ai-mcp-server --client claude
+**Windows**:
+```powershell
+.\run_tests.ps1  # PowerShell
+# 或
+run_tests.bat    # CMD
 ```
+
+---
+
+## 📚 完整文档
+
+### 安装指南
+- 🪟 [Windows 安装指南](docs/WINDOWS_INSTALLATION.md) - Windows 详细步骤
+- 🪟 [Windows 快速开始](docs/WINDOWS_QUICK_START.md) - 5分钟快速安装
+- 📖 [部署指南](docs/DEPLOYMENT_GUIDE.md) - 通用部署文档
+- 🚀 [快速开始](docs/QUICK_START.md) - Linux/macOS 快速开始
+
+### 集成教程
+- 🔧 [VS Code 集成](docs/VSCODE_INTEGRATION.md) - MCP 配置
+- 🎨 [Cherry Studio 集成](docs/CHERRY_STUDIO_INTEGRATION.md) - 其他客户端
+
+### 配置和 API
+- ⚙️ [配置说明](examples/CONFIG.md) - 配置文件详解
+- 🔑 [Google API 设置](docs/GOOGLE_API_SETUP_CN.md) - 获取 API 凭据
+- 🔍 [API Key 错误诊断](docs/API_KEY_ERROR_GUIDE.md) - 问题排查
+
+### 项目信息
+- 📁 [项目结构](PROJECT_STRUCTURE.md) - 目录组织说明
+- 📝 [快速参考](QUICK_REFERENCE.md) - 常用命令和链接
+- 🔄 [重构总结](REFACTOR_SUMMARY.md) - 项目重构记录
+
+---
 
 ## 使用方法
 
