@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2025-10-12
+
+### Tested
+- ✅ **Continuous validation** - All tests passing
+- ✅ Unit tests: 21/21 passed (0.96s)
+- ✅ Persistent cache: 7/7 passed (4.27s)
+- ✅ Health checks: 4/4 passed
+- ✅ Export functionality: 4/4 passed (6.63s)
+- **Total: 36/36 tests passing** (100% success rate)
+
+### Maintenance
+- Regular cleanup of Python cache files
+- Test artifacts cleaned
+- Confirmed stability after v0.5.3-0.5.4 tool consolidation
+
 ## [0.5.4] - 2025-10-11
 
 ### Tested
