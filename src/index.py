@@ -169,15 +169,18 @@ async def search(query: str, num_results: int = 10, engine: str = "auto") -> str
 
 
 @mcp.tool()
-async def health_check() -> str:
-    """健康检查端点 - 返回服务基本状态。
+async def system_status(check_type: str = "health") -> str:
+    """系统状态检查 - 统一的监控端点
     
-    返回服务的基本健康状态，包括：
-    - 服务状态（健康/不健康）
-    - 服务版本
-    - 运行时长
-    - 可用的搜索引擎数量
-    - 爬虫状态
+    Args:
+        check_type: 检查类型，可选值：
+            - "health": 基本健康状态（默认）
+            - "readiness": 就绪状态检查
+            - "metrics": 详细性能指标
+            - "all": 返回所有状态信息
+    
+    Returns:
+        JSON格式的状态信息
     """
     global crawler, search_manager, start_time
     
@@ -194,30 +197,129 @@ async def health_check() -> str:
         engines_list = [type(e).__name__ for e in search_manager.engines] \
             if search_manager else []
         
-        # 检查爬虫状态
-        crawler_status = "initialized" if crawler else "not_initialized"
-        
-        health_data = {
-            "status": "healthy",
-            "version": "0.5.2",
-            "uptime_seconds": round(uptime_seconds, 2),
-            "uptime_hours": round(uptime_hours, 2),
-            "components": {
-                "crawler": {
-                    "status": crawler_status,
-                    "ready": crawler is not None
+        # Health check data
+        if check_type in ["health", "all"]:
+            crawler_status = "initialized" if crawler else "not_initialized"
+            
+            health_data = {
+                "status": "healthy",
+                "version": "0.5.3",
+                "uptime_seconds": round(uptime_seconds, 2),
+                "uptime_hours": round(uptime_hours, 2),
+                "components": {
+                    "crawler": {
+                        "status": crawler_status,
+                        "ready": crawler is not None
+                    },
+                    "search": {
+                        "status": "ready" if engines_count > 0 else "no_engines",
+                        "engines_count": engines_count,
+                        "engines": engines_list
+                    }
                 },
-                "search": {
-                    "status": "ready" if engines_count > 0 else "no_engines",
-                    "engines_count": engines_count,
-                    "engines": engines_list
+                "timestamp": time.time()
+            }
+            
+            if check_type == "health":
+                return json.dumps(health_data, ensure_ascii=False, indent=2)
+        
+        # Readiness check data
+        if check_type in ["readiness", "all"]:
+            config_file = Path("config.json")
+            
+            checks = {
+                "config_file": {
+                    "status": "pass" if config_file.exists() else "fail",
+                    "message": "Config file exists" if config_file.exists() 
+                              else "Config file not found"
+                },
+                "search_engines": {
+                    "status": "pass" if engines_count > 0 else "fail",
+                    "message": f"{engines_count} engines available" 
+                              if engines_count > 0 
+                              else "No search engines configured"
+                },
+                "crawler": {
+                    "status": "pass",
+                    "message": "Crawler can be initialized on demand"
                 }
-            },
+            }
+            
+            all_passed = all(c["status"] == "pass" for c in checks.values())
+            
+            readiness_data = {
+                "ready": all_passed,
+                "checks": checks,
+                "timestamp": time.time()
+            }
+            
+            if check_type == "readiness":
+                return json.dumps(readiness_data, ensure_ascii=False, indent=2)
+        
+        # Metrics data
+        if check_type in ["metrics", "all"]:
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            
+            monitor_data = {}
+            if search_manager and hasattr(search_manager, 'monitor'):
+                monitor = search_manager.monitor
+                overall_stats = monitor.get_overall_stats()
+                engine_stats = monitor.get_engine_stats()
+                
+                monitor_data = {
+                    "overall": overall_stats,
+                    "engines": engine_stats,
+                    "recent_searches_count": len(monitor.recent_searches)
+                }
+            
+            metrics_data = {
+                "service": {
+                    "uptime_seconds": round(uptime_seconds, 2),
+                    "version": "0.5.3"
+                },
+                "system": {
+                    "cpu_percent": psutil.cpu_percent(interval=0.1),
+                    "memory": {
+                        "rss_mb": round(memory_info.rss / 1024 / 1024, 2),
+                        "vms_mb": round(memory_info.vms / 1024 / 1024, 2),
+                        "percent": process.memory_percent()
+                    }
+                },
+                "components": {
+                    "crawler": {
+                        "initialized": crawler is not None
+                    },
+                    "search": {
+                        "engines_count": engines_count,
+                        "monitor": monitor_data
+                    }
+                },
+                "timestamp": time.time()
+            }
+            
+            if check_type == "metrics":
+                return json.dumps(metrics_data, ensure_ascii=False, indent=2)
+        
+        # Return all data
+        if check_type == "all":
+            return json.dumps({
+                "health": health_data,
+                "readiness": readiness_data,
+                "metrics": metrics_data
+            }, ensure_ascii=False, indent=2)
+        
+        return json.dumps({
+            "error": f"Invalid check_type: {check_type}",
+            "valid_types": ["health", "readiness", "metrics", "all"]
+        }, ensure_ascii=False, indent=2)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "unhealthy",
+            "error": str(e),
             "timestamp": time.time()
-        }
-        
-        return json.dumps(health_data, ensure_ascii=False, indent=2)
-        
+        }, ensure_ascii=False, indent=2)
     except Exception as e:
         error_health = {
             "status": "unhealthy",
@@ -225,133 +327,6 @@ async def health_check() -> str:
             "timestamp": time.time()
         }
         return json.dumps(error_health, ensure_ascii=False, indent=2)
-
-
-@mcp.tool()
-async def readiness_check() -> str:
-    """就绪检查端点 - 检查服务是否准备好接收请求。
-    
-    返回服务的就绪状态，包括：
-    - 是否准备好接收请求
-    - 各组件的就绪状态
-    - 配置文件检查
-    - 依赖服务状态
-    """
-    global crawler, search_manager
-    
-    try:
-        await initialize_search_manager()
-        
-        # 检查配置文件
-        config_exists = os.path.exists("config.json")
-        
-        # 检查搜索引擎
-        has_engines = search_manager and len(search_manager.engines) > 0
-        
-        # 检查各组件就绪状态
-        is_ready = config_exists and has_engines
-        
-        readiness_data = {
-            "ready": is_ready,
-            "checks": {
-                "config_file": {
-                    "status": "pass" if config_exists else "fail",
-                    "message": "Config file exists" if config_exists 
-                              else "Config file not found"
-                },
-                "search_engines": {
-                    "status": "pass" if has_engines else "fail",
-                    "message": f"{len(search_manager.engines)} engines available" 
-                              if has_engines else "No search engines configured"
-                },
-                "crawler": {
-                    "status": "pass",
-                    "message": "Crawler can be initialized on demand"
-                }
-            },
-            "timestamp": time.time()
-        }
-        
-        return json.dumps(readiness_data, ensure_ascii=False, indent=2)
-        
-    except Exception as e:
-        error_readiness = {
-            "ready": False,
-            "error": str(e),
-            "timestamp": time.time()
-        }
-        return json.dumps(error_readiness, ensure_ascii=False, indent=2)
-
-
-@mcp.tool()
-async def metrics() -> str:
-    """指标端点 - 返回服务的性能指标和统计信息。
-    
-    返回详细的服务指标，包括：
-    - 系统资源使用情况（CPU、内存）
-    - 服务运行统计
-    - 搜索引擎性能指标
-    - 缓存统计（如果启用）
-    """
-    global crawler, search_manager, start_time
-    
-    try:
-        await initialize_search_manager()
-        
-        # 获取系统资源使用情况
-        process = psutil.Process()
-        memory_info = process.memory_info()
-        
-        # 计算运行时长
-        uptime_seconds = time.time() - start_time
-        
-        # 获取搜索管理器的监控数据
-        monitor_data = {}
-        if search_manager and hasattr(search_manager, 'monitor'):
-            monitor = search_manager.monitor
-            overall_stats = monitor.get_overall_stats()
-            engine_stats = monitor.get_engine_stats()
-            
-            monitor_data = {
-                "overall": overall_stats,
-                "engines": engine_stats,
-                "recent_searches_count": len(monitor.recent_searches)
-            }
-        
-        metrics_data = {
-            "service": {
-                "uptime_seconds": round(uptime_seconds, 2),
-                "version": "0.5.2"
-            },
-            "system": {
-                "cpu_percent": psutil.cpu_percent(interval=0.1),
-                "memory": {
-                    "rss_mb": round(memory_info.rss / 1024 / 1024, 2),
-                    "vms_mb": round(memory_info.vms / 1024 / 1024, 2),
-                    "percent": process.memory_percent()
-                }
-            },
-            "components": {
-                "crawler": {
-                    "initialized": crawler is not None
-                },
-                "search": {
-                    "engines_count": len(search_manager.engines) 
-                                    if search_manager else 0,
-                    "monitor": monitor_data
-                }
-            },
-            "timestamp": time.time()
-        }
-        
-        return json.dumps(metrics_data, ensure_ascii=False, indent=2)
-        
-    except Exception as e:
-        error_metrics = {
-            "error": str(e),
-            "timestamp": time.time()
-        }
-        return json.dumps(error_metrics, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
@@ -543,7 +518,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.5.2"
+                "version": "0.5.3"
             }
         
         # 确保输出目录存在

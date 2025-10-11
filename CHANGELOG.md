@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2025-10-11
+
+### Changed
+- ♻️ **Tool Consolidation**: Reduced MCP tool count from 7 to 5 (29% reduction)
+- Merged 3 monitoring tools into unified `system_status` tool:
+  - `health_check` → `system_status(check_type="health")`
+  - `readiness_check` → `system_status(check_type="readiness")`
+  - `metrics` → `system_status(check_type="metrics")`
+  - New `check_type="all"` returns all checks in one call
+
+### Benefits
+- **Copilot Compatibility**: Better fits within Copilot's 128-tool limit
+- **Simpler API**: One endpoint for all monitoring needs
+- **Backward Compatible**: All original data structures preserved
+- **More Flexible**: `check_type="all"` enables comprehensive health checks
+
+### Current Tools (5)
+1. `read_url` - Crawl and read webpage content
+2. `search` - Search the web using multiple engines
+3. `system_status` - **NEW** Unified system monitoring (health/readiness/metrics)
+4. `manage_cache` - Cache management operations
+5. `export_search_results` - Export search results to JSON
+
+### Tested
+- ✅ All 4 check types verified: health, readiness, metrics, all
+- ✅ Updated test suite: `tests/test_health_checks.py` (4/4 tests passing)
+- ✅ No functionality loss - all original data structures maintained
+
 ## [0.5.2] - 2025-10-11
 
 ### Fixed
