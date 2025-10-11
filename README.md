@@ -8,13 +8,14 @@
 
 ## 特性
 
-- 🔍 强大的多引擎搜索能力,支持 DuckDuckGo、Google 和 SearXNG
-- 🆓 完全免费选项 - SearXNG 自建实例,无限制使用
+- 🔍 强大的多引擎搜索能力,支持 Brave Search、DuckDuckGo、Google 和 SearXNG
+- 🤖 智能自动回退 - API 失效时自动切换其他搜索引擎
+- 🆓 多种免费选项 - Brave (2000次/月)、DuckDuckGo (无限制)、SearXNG (自建无限制)
 - 📚 面向LLM优化的网页内容提取,智能过滤非核心内容
 - 🎯 专注信息价值,自动识别和保留关键内容
 - 📝 多种输出格式,支持引用溯源
 - 🚀 基于FastMCP的高性能异步设计
-- 🔐 隐私保护 - SearXNG 不跟踪用户搜索记录
+- 🔐 隐私保护 - Brave 和 SearXNG 不跟踪用户搜索记录
 
 ## 项目结构
 
@@ -115,8 +116,10 @@ notepad config.json
 
 #### 2. 配置搜索引擎（可选）
 
-本项目支持三种搜索引擎：
+本项目支持四种搜索引擎：
 
+- **Brave Search**（推荐）：需要 API 密钥，2000次/月免费额度
+  - 📖 [Brave Search 集成指南](docs/BRAVE_SEARCH_INTEGRATION.md) - 完整配置教程
 - **DuckDuckGo**（默认）：无需配置，开箱即用
 - **Google**：需要 API 密钥，100次/天免费额度
   - 📖 [Google API 配置指南](docs/GOOGLE_API_SETUP_CN.md) - 详细中文教程
@@ -171,28 +174,46 @@ run_tests.bat    # CMD
 服务器提供以下工具:
 
 ### search
-强大的网络搜索工具,支持多个搜索引擎:
+强大的网络搜索工具,支持多个搜索引擎和智能回退:
 
-- **DuckDuckGo**（默认）：无需API密钥，全面处理AbstractText、Results和RelatedTopics
+- **Brave Search**：需要API密钥，高质量搜索结果，2000次/月免费
+- **DuckDuckGo**：无需API密钥，完全免费，作为默认回退引擎
 - **Google**：需要配置API密钥，提供精准搜索结果
 - **SearXNG**：完全免费无限制，需要部署实例，支持隐私保护
-- 支持同时使用多个引擎获取更全面的结果
+- **智能回退**：当主引擎失败（API过期、配额用尽等）时，自动切换到备用引擎
 
 参数说明:
 - `query`: 搜索查询字符串
 - `num_results`: 返回结果数量(默认10)
 - `engine`: 搜索引擎选择
-  - "duckduckgo": DuckDuckGo搜索(默认)
+  - "auto": 自动选择最佳引擎,失败时自动回退(默认,推荐)
+  - "brave": Brave搜索(需要API密钥,2000次/月免费)
+  - "duckduckgo": DuckDuckGo搜索(完全免费)
   - "google": Google搜索(需要API密钥)
   - "searxng": SearXNG搜索(需要部署实例,完全免费无限制)
   - "all": 同时使用所有可用的搜索引擎
 
 示例:
 ```python
-# DuckDuckGo搜索(默认)
+# 自动模式（推荐，支持智能回退）
 {
     "query": "python programming",
-    "num_results": 5
+    "num_results": 5,
+    "engine": "auto"
+}
+
+# Brave搜索
+{
+    "query": "python programming",
+    "num_results": 5,
+    "engine": "brave"
+}
+
+# DuckDuckGo搜索
+{
+    "query": "python programming",
+    "num_results": 5,
+    "engine": "duckduckgo"
 }
 
 # Google搜索
@@ -218,12 +239,16 @@ run_tests.bat    # CMD
 ```
 
 配置说明:
+- **Brave**: 需要在 `config.json` 中配置 API 密钥
 - **DuckDuckGo**: 无需配置
 - **Google**: 需要在 `config.json` 中配置 API 密钥
 - **SearXNG**: 需要在 `config.json` 中配置实例地址
 
 ```json
 {
+    "brave": {
+        "api_key": "your-brave-api-key"
+    },
     "google": {
         "api_key": "your-api-key",
         "cse_id": "your-cse-id"

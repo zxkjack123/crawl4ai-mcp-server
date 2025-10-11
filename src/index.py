@@ -114,14 +114,16 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
         return json.dumps({"error": error_msg}, ensure_ascii=False)
 
 @mcp.tool()
-async def search(query: str, num_results: int = 10, engine: str = "duckduckgo") -> str:
+async def search(query: str, num_results: int = 10, engine: str = "auto") -> str:
     """执行网络搜索并返回结果。
 
     Args:
         query: 搜索查询字符串
         num_results: 返回结果的数量,默认为10
         engine: 使用的搜索引擎,可选值:
-            - "duckduckgo": 使用DuckDuckGo搜索(默认,完全免费)
+            - "auto": 自动选择最佳引擎,失败时自动回退(默认,推荐)
+            - "brave": 使用Brave搜索(需要API密钥,2000次/月免费)
+            - "duckduckgo": 使用DuckDuckGo搜索(完全免费)
             - "google": 使用Google搜索(需要配置API密钥,100次/天免费)
             - "searxng": 使用SearXNG搜索(需要部署实例,完全免费无限制)
             - "all": 使用所有已配置的搜索引擎
