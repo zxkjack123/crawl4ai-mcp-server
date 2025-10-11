@@ -8,11 +8,13 @@
 
 ## 特性
 
-- 🔍 强大的多引擎搜索能力,支持DuckDuckGo和Google
+- 🔍 强大的多引擎搜索能力,支持 DuckDuckGo、Google 和 SearXNG
+- 🆓 完全免费选项 - SearXNG 自建实例,无限制使用
 - 📚 面向LLM优化的网页内容提取,智能过滤非核心内容
 - 🎯 专注信息价值,自动识别和保留关键内容
 - 📝 多种输出格式,支持引用溯源
 - 🚀 基于FastMCP的高性能异步设计
+- 🔐 隐私保护 - SearXNG 不跟踪用户搜索记录
 
 ## 项目结构
 
@@ -111,14 +113,17 @@ copy examples\config.example.json config.json
 notepad config.json
 ```
 
-#### 2. 配置 Google API（可选）
+#### 2. 配置搜索引擎（可选）
 
-如果需要使用 Google 搜索引擎，请参考以下文档：
+本项目支持三种搜索引擎：
 
-- 📖 [Google API 配置指南](docs/GOOGLE_API_SETUP_CN.md) - 详细中文教程
-- 📖 [配置说明](examples/CONFIG.md) - 快速配置指南
+- **DuckDuckGo**（默认）：无需配置，开箱即用
+- **Google**：需要 API 密钥，100次/天免费额度
+  - 📖 [Google API 配置指南](docs/GOOGLE_API_SETUP_CN.md) - 详细中文教程
+- **SearXNG**：完全免费无限制，需要部署实例
+  - 📖 [SearXNG 集成指南](docs/SEARXNG_INTEGRATION.md) - 部署和配置教程
 
-**注意**: DuckDuckGo 搜索引擎无需配置即可使用。
+更多配置详情，请参考 📖 [配置说明](examples/CONFIG.md)。
 
 ### 🧪 测试
 
@@ -168,8 +173,9 @@ run_tests.bat    # CMD
 ### search
 强大的网络搜索工具,支持多个搜索引擎:
 
-- DuckDuckGo搜索(默认): 无需API密钥,全面处理AbstractText、Results和RelatedTopics
-- Google搜索: 需要配置API密钥,提供精准搜索结果
+- **DuckDuckGo**（默认）：无需API密钥，全面处理AbstractText、Results和RelatedTopics
+- **Google**：需要配置API密钥，提供精准搜索结果
+- **SearXNG**：完全免费无限制，需要部署实例，支持隐私保护
 - 支持同时使用多个引擎获取更全面的结果
 
 参数说明:
@@ -178,6 +184,7 @@ run_tests.bat    # CMD
 - `engine`: 搜索引擎选择
   - "duckduckgo": DuckDuckGo搜索(默认)
   - "google": Google搜索(需要API密钥)
+  - "searxng": SearXNG搜索(需要部署实例,完全免费无限制)
   - "all": 同时使用所有可用的搜索引擎
 
 示例:
@@ -188,11 +195,43 @@ run_tests.bat    # CMD
     "num_results": 5
 }
 
+# Google搜索
+{
+    "query": "python programming",
+    "num_results": 5,
+    "engine": "google"
+}
+
+# SearXNG搜索
+{
+    "query": "python programming",
+    "num_results": 5,
+    "engine": "searxng"
+}
+
 # 使用所有可用引擎
 {
     "query": "python programming",
     "num_results": 5,
     "engine": "all"
+}
+```
+
+配置说明:
+- **DuckDuckGo**: 无需配置
+- **Google**: 需要在 `config.json` 中配置 API 密钥
+- **SearXNG**: 需要在 `config.json` 中配置实例地址
+
+```json
+{
+    "google": {
+        "api_key": "your-api-key",
+        "cse_id": "your-cse-id"
+    },
+    "searxng": {
+        "base_url": "http://localhost:8080",
+        "language": "zh-CN"
+    }
 }
 ```
 
@@ -211,32 +250,6 @@ run_tests.bat    # CMD
 {
     "url": "https://example.com",
     "format": "markdown_with_citations"
-}
-```
-
-示例:
-```python
-# DuckDuckGo搜索(默认)
-{
-    "query": "python programming",
-    "num_results": 5
-}
-
-# Google搜索
-{
-    "query": "python programming",
-    "num_results": 5,
-    "engine": "google"
-}
-```
-
-如需使用Google搜索,需要在config.json中配置API密钥:
-```json
-{
-    "google": {
-        "api_key": "your-api-key",
-        "cse_id": "your-cse-id"
-    }
 }
 ```
 
