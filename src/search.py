@@ -7,15 +7,28 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from duckduckgo_search import DDGS
-from src.cache import SearchCache
-from src.utils import (
-    async_retry, MultiRateLimiter, RateLimitConfig,
-    merge_and_deduplicate, deduplicate_results
-)
-from src.monitor import (
-    PerformanceMonitor, SearchMetrics, get_monitor,
-    initialize_monitoring
-)
+
+# Use relative import or direct import depending on context
+try:
+    from .cache import SearchCache
+    from .utils import (
+        async_retry, MultiRateLimiter, RateLimitConfig,
+        merge_and_deduplicate, deduplicate_results
+    )
+    from .monitor import (
+        PerformanceMonitor, SearchMetrics, get_monitor,
+        initialize_monitoring
+    )
+except ImportError:
+    from cache import SearchCache
+    from utils import (
+        async_retry, MultiRateLimiter, RateLimitConfig,
+        merge_and_deduplicate, deduplicate_results
+    )
+    from monitor import (
+        PerformanceMonitor, SearchMetrics, get_monitor,
+        initialize_monitoring
+    )
 
 logger = logging.getLogger(__name__)
 
