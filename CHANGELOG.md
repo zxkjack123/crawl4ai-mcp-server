@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2025-10-11
+
+### Fixed
+- **Critical**: Fixed ModuleNotFoundError preventing MCP server startup
+- Fixed import errors in `src/index.py` - changed from absolute to relative/fallback imports
+- Fixed cascading import errors in `src/search.py` for cache, utils, and monitor modules
+- All modules now use try/except pattern for imports (relative → direct fallback)
+
+### Added
+- Comprehensive test results documentation (`docs/TEST_RESULTS_v0.5.2.md`)
+- Full test suite execution with 35/35 tests passing
+
+### Tested
+- ✅ Unit tests: 21/21 passed (81% coverage)
+- ✅ Persistent cache: 7/7 passed
+- ✅ Health checks: 3/3 passed
+- ✅ Export functionality: 4/4 passed
+
+### Technical Details
+**Import Pattern**:
+```python
+try:
+    from .module import Class  # Relative import
+except ImportError:
+    from module import Class   # Direct import fallback
+```
+
+This ensures compatibility with:
+- MCP Server execution context
+- Direct Python script execution
+- Test runner execution
+- Module imports
+
+---
+
 ## [0.5.1] - 2025-10-11
 
 ### Changed
