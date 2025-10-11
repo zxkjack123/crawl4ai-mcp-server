@@ -112,6 +112,66 @@ class GoogleSearch(SearchEngine):
                 
             return results
 
+class SearXNGSearch(SearchEngine):
+    def __init__(self, base_url: str = "http://localhost:8080", language: str = "zh-CN"):
+        """
+        初始化 SearXNG 搜索引擎
+        
+        Args:
+            base_url: SearXNG 实例的基础 URL (例如: http://localhost:8080 或 https://searx.example.com)
+            language: 搜索语言，默认为 zh-CN (中文)
+        """
+        self.base_url = base_url.rstrip('/')
+        self.language = language
+        
+    async def search(self, query: str, num_results: int = 10) -> List[SearchResult]:
+        """
+        使用 SearXNG 进行搜索
+        
+        Args:
+            query: 搜索查询字符串
+            num_results: 需要返回的结果数量
+            
+        Returns:
+            搜索结果列表
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                params = {
+                    'q': query,
+                    'format': 'json',
+                    'language': self.language,
+                    'pageno': 1
+                }
+                
+                search_url = f"{self.base_url}/search"
+                logger.info(f"Sending request to SearXNG: {search_url} with query: {query}")
+                
+                response = await client.get(search_url, params=params)
+                response.raise_for_status()
+                data = response.json()
+                
+                logger.info(f"SearXNG search successful, got {len(data.get('results', []))} results")
+                
+                results = []
+                for item in data.get('results', [])[:num_results]:
+                    results.append(SearchResult(
+                        title=item.get('title', ''),
+                        link=item.get('url', ''),
+                        snippet=item.get('content', ''),
+                        source='searxng'
+                    ))
+                
+                return results
+                
+        except httpx.HTTPError as e:
+            logger.error(f"SearXNG HTTP error: {str(e)}")
+            logger.warning("如果 SearXNG 未运行，请使用 'docker run -d -p 8080:8080 searxng/searxng' 启动")
+            return []
+        except Exception as e:
+            logger.error(f"SearXNG search failed: {str(e)}")
+            return []
+
 class SearchManager:
     def __init__(self):
         self.engines: List[SearchEngine] = []
@@ -121,30 +181,62 @@ class SearchManager:
         # 总是添加DuckDuckGo搜索
         self.engines.append(DuckDuckGoSearch())
         
-        # 如果配置文件存在,尝试添加Google搜索
-        config_path = os.path.join(os.path.dirname(__file__), '..', 'config.json')
+        # 如果配置文件存在,尝试添加其他搜索引擎
+        config_path = os.path.join(
+            os.path.dirname(__file__), '..', 'config.json'
+        )
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r') as f:
                     config = json.load(f)
+                    
+                # 添加 Google 搜索
                 if 'google' in config:
                     google_config = config['google']
-                    if google_config.get('api_key') and google_config.get('cse_id'):
+                    if (google_config.get('api_key') and
+                            google_config.get('cse_id')):
                         self.engines.append(GoogleSearch(
                             api_key=google_config['api_key'],
                             cse_id=google_config['cse_id']
                         ))
-            except Exception as e:
-                print(f"Failed to load Google search configuration: {e}")
+                        logger.info("Google search engine initialized")
                 
-    async def search(self, query: str, num_results: int = 10, engine: str = "duckduckgo") -> List[Dict]:
+                # 添加 SearXNG 搜索
+                if 'searxng' in config:
+                    searxng_config = config['searxng']
+                    base_url = searxng_config.get(
+                        'base_url', 'http://localhost:8080'
+                    )
+                    language = searxng_config.get('language', 'zh-CN')
+                    self.engines.append(SearXNGSearch(
+                        base_url=base_url,
+                        language=language
+                    ))
+                    logger.info(
+                        f"SearXNG search engine initialized: {base_url}"
+                    )
+                    
+            except Exception as e:
+                logger.error(
+                    f"Failed to load search configuration: {e}"
+                )
+                
+    async def search(
+            self,
+            query: str,
+            num_results: int = 10,
+            engine: str = "duckduckgo"
+    ) -> List[Dict]:
         all_results = []
         
         if not self.engines:
             logger.warning("No search engines available")
             return []
 
-        logger.info(f"Starting search with query: {query}, engine: {engine}, num_results: {num_results}")
+        logger.info(
+            f"Starting search with query: {query}, "
+            f"engine: {engine}, num_results: {num_results}"
+        )
         
         for search_engine in self.engines:
             engine_name = search_engine.__class__.__name__.lower()
@@ -152,28 +244,38 @@ class SearchManager:
                 engine_type = 'duckduckgo'
             elif engine_name.startswith('google'):
                 engine_type = 'google'
+            elif engine_name.startswith('searxng'):
+                engine_type = 'searxng'
             else:
                 engine_type = engine_name
                 
             if engine.lower() != "all":
                 if engine_type != engine.lower():
-                    logger.debug(f"Skipping {engine_name} as it doesn't match requested engine: {engine}")
+                    logger.debug(
+                        f"Skipping {engine_name} as it doesn't match "
+                        f"requested engine: {engine}"
+                    )
                     continue
                 
             try:
                 results = await search_engine.search(query, num_results)
-                logger.info(f"Got {len(results)} results from {engine_name}")
-                logger.info(f"Raw results: {results}")  # 添加原始结果日志
+                logger.info(
+                    f"Got {len(results)} results from {engine_name}"
+                )
+                logger.info(f"Raw results: {results}")
                 
                 # 检查结果类型
                 if results:
                     logger.info(f"First result type: {type(results[0])}")
                     
                 converted_results = [r.to_dict() for r in results]
-                logger.info(f"Converted results: {converted_results}")  # 添加转换后结果日志
+                logger.info(f"Converted results: {converted_results}")
                 all_results.extend(converted_results)
             except Exception as e:
-                logger.error(f"Search failed for {engine_name}: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Search failed for {engine_name}: {str(e)}",
+                    exc_info=True
+                )
                 
         final_results = all_results[:num_results]
         logger.info(f"Returning {len(final_results)} total results")

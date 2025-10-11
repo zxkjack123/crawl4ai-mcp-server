@@ -2,5 +2,9 @@
     "google": {
         "api_key": "YOUR_GOOGLE_API_KEY_HERE",
         "cse_id": "YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE"
+    },
+    "searxng": {
+        "base_url": "http://localhost:8080",
+        "language": "zh-CN"
     }
 }
