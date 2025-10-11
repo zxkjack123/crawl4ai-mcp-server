@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  crawl4ai-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crawl4ai-mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      # API 密钥（从环境变量或 .env 文件读取）
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CSE_ID=${GOOGLE_CSE_ID:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      # 代理设置（可选）
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-}
+      # 应用配置
+      - ENABLE_CACHE=true
+      - CACHE_TTL=3600
+      - ENABLE_RATE_LIMIT=true
+      - ENABLE_MONITORING=true
+      - LOG_LEVEL=INFO
+    volumes:
+      # 挂载配置文件（如果需要使用文件配置）
+      - ./config.json:/app/config.json:ro
+      # 挂载日志目录
+      - ./logs:/app/logs
+      # 挂载缓存目录（持久化缓存）
+      - ./cache:/app/cache
+      # 挂载报告目录
+      - ./reports:/app/reports
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # 可选：添加 Redis 用于缓存持久化
+  redis:
+    image: redis:7-alpine
+    container_name: crawl4ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    name: crawl4ai-network

@@ -23,14 +23,14 @@ logger = logging.getLogger(__name__)
 
 def deduplicate_results(
     results: List[Dict[str, Any]],
-    key: str = "url"
+    key: str = "link"
 ) -> List[Dict[str, Any]]:
     """
     对搜索结果去重
     
     Args:
         results: 搜索结果列表
-        key: 用于去重的键（默认为 "url"）
+        key: 用于去重的键（默认为 "link"）
         
     Returns:
         去重后的结果列表

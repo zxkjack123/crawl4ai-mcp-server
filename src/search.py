@@ -1,4 +1,5 @@
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
+import asyncio
 import httpx
 import json
 import os
@@ -532,89 +533,90 @@ class SearchManager:
         # 用于收集所有引擎的结果（all 模式）
         all_engine_results = {}
         
-        # 尝试每个引擎进行搜索
-        for search_engine in engines_to_try:
-            engine_name = search_engine.__class__.__name__
-            engine_type = engine_name.lower()
-            
-            # 获取引擎类型标识
-            if 'brave' in engine_type:
-                engine_type = 'brave'
-            elif 'duckduckgo' in engine_type:
-                engine_type = 'duckduckgo'
-            elif 'google' in engine_type:
-                engine_type = 'google'
-            elif 'searxng' in engine_type:
-                engine_type = 'searxng'
+        # all 模式：使用并发搜索
+        if engine.lower() == "all":
+            logger.info(
+                f"Starting concurrent search with {len(engines_to_try)} "
+                f"engines"
+            )
+            all_engine_results = await self._concurrent_search(
+                engines_to_try, query, num_results
+            )
+        else:
+            # auto 或指定引擎模式：串行搜索（支持早停）
+            for search_engine in engines_to_try:
+                engine_name = search_engine.__class__.__name__
+                engine_type = self._get_engine_type(search_engine)
 
-            try:
-                # 检查限流
-                if self.rate_limiter:
-                    await self.rate_limiter.acquire(engine_type)
-                
-                # 执行搜索（自动重试）
-                results = await self._search_with_retry(
-                    search_engine, query, num_results
-                )
-                
-                logger.info(
-                    f"Got {len(results)} results from {engine_name}"
-                )
+                try:
+                    # 检查限流
+                    if self.rate_limiter:
+                        await self.rate_limiter.acquire(engine_type)
+                    
+                    # 执行搜索（自动重试）
+                    results = await self._search_with_retry(
+                        search_engine, query, num_results
+                    )
+                    
+                    logger.info(
+                        f"Got {len(results)} results from {engine_name}"
+                    )
 
-                if results:
-                    converted_results = [r.to_dict() for r in results]
-                    
-                    # 为结果添加引擎标识
-                    for result in converted_results:
-                        if 'engine' not in result:
-                            result['engine'] = engine_type
-                    
-                    if engine.lower() == "all":
-                        # all 模式：收集所有结果，稍后合并去重
-                        all_engine_results[engine_type] = converted_results
-                    else:
+                    if results:
+                        converted_results = [r.to_dict() for r in results]
+                        
+                        # 为结果添加引擎标识
+                        for result in converted_results:
+                            if 'engine' not in result:
+                                result['engine'] = engine_type
+                        
                         all_results.extend(converted_results)
 
-                    # 如果是 auto 模式且已获得足够结果，
-                    # 则停止尝试其他引擎
-                    auto_mode = engine.lower() == "auto"
-                    enough_results = len(all_results) >= num_results
-                    if auto_mode and enough_results:
-                        logger.info(
-                            f"Got enough results from {engine_name}, "
-                            f"stopping"
+                        # 如果是 auto 模式且已获得足够结果，
+                        # 则停止尝试其他引擎
+                        auto_mode = engine.lower() == "auto"
+                        enough_results = len(all_results) >= num_results
+                        if auto_mode and enough_results:
+                            logger.info(
+                                f"Got enough results from {engine_name}, "
+                                f"stopping"
+                            )
+                            success = True
+                            break
+                    else:
+                        logger.warning(
+                            f"No results from {engine_name}, "
+                            f"trying next engine"
                         )
-                        success = True
-                        break
-                else:
-                    logger.warning(
-                        f"No results from {engine_name}, "
-                        f"trying next engine"
-                    )
 
-            except Exception as e:
-                logger.error(
-                    f"Search failed for {engine_name}: {str(e)}",
-                    exc_info=True
-                )
-                error_msg = str(e)
-                # 继续尝试下一个引擎
-                if engine.lower() == "auto":
-                    logger.info(
-                        f"Trying fallback engines due to "
-                        f"{engine_name} failure"
+                except Exception as e:
+                    logger.error(
+                        f"Search failed for {engine_name}: {str(e)}",
+                        exc_info=True
                     )
+                    error_msg = str(e)
+                    # 继续尝试下一个引擎
+                    if engine.lower() == "auto":
+                        logger.info(
+                            f"Trying fallback engines due to "
+                            f"{engine_name} failure"
+                        )
 
         # 处理 all 模式：合并去重和排序
-        if engine.lower() == "all" and all_engine_results:
-            logger.info(
-                f"Merging results from {len(all_engine_results)} engines"
-            )
-            all_results = merge_and_deduplicate(
-                all_engine_results,
-                num_results=num_results
-            )
-            success = len(all_results) > 0
+        if engine.lower() == "all":
+            if all_engine_results:
+                logger.info(
+                    f"Merging results from {len(all_engine_results)} engines"
+                )
+                all_results = merge_and_deduplicate(
+                    all_engine_results,
+                    num_results=num_results
+                )
+                success = len(all_results) > 0
+            else:
+                logger.warning("No results from any engine in all mode")
+                all_results = []
+                success = False
         elif engine.lower() != "all":
             # 非 all 模式：简单截取
             final_results = all_results[:num_results]
@@ -640,6 +642,137 @@ class SearchManager:
             self.monitor.record_search(metrics)
 
         return all_results
+    
+    def _get_engine_type(self, search_engine: SearchEngine) -> str:
+        """
+        获取引擎类型标识
+        
+        Args:
+            search_engine: 搜索引擎实例
+            
+        Returns:
+            引擎类型字符串
+        """
+        engine_name = search_engine.__class__.__name__.lower()
+        
+        if 'brave' in engine_name:
+            return 'brave'
+        elif 'duckduckgo' in engine_name:
+            return 'duckduckgo'
+        elif 'google' in engine_name:
+            return 'google'
+        elif 'searxng' in engine_name:
+            return 'searxng'
+        else:
+            return engine_name
+    
+    async def _search_single_engine(
+        self,
+        search_engine: SearchEngine,
+        query: str,
+        num_results: int
+    ) -> tuple[str, List[Dict], Optional[str]]:
+        """
+        搜索单个引擎（用于并发搜索）
+        
+        Args:
+            search_engine: 搜索引擎实例
+            query: 搜索查询
+            num_results: 结果数量
+            
+        Returns:
+            (engine_type, results, error_message)
+        """
+        engine_name = search_engine.__class__.__name__
+        engine_type = self._get_engine_type(search_engine)
+        
+        try:
+            # 检查限流
+            if self.rate_limiter:
+                await self.rate_limiter.acquire(engine_type)
+            
+            # 执行搜索（自动重试）
+            results = await self._search_with_retry(
+                search_engine, query, num_results
+            )
+            
+            logger.info(
+                f"Got {len(results)} results from {engine_name}"
+            )
+            
+            if results:
+                converted_results = [r.to_dict() for r in results]
+                
+                # 为结果添加引擎标识
+                for result in converted_results:
+                    if 'engine' not in result:
+                        result['engine'] = engine_type
+                
+                return engine_type, converted_results, None
+            else:
+                logger.warning(f"No results from {engine_name}")
+                return engine_type, [], None
+                
+        except Exception as e:
+            logger.error(
+                f"Search failed for {engine_name}: {str(e)}",
+                exc_info=True
+            )
+            return engine_type, [], str(e)
+    
+    async def _concurrent_search(
+        self,
+        engines: List[SearchEngine],
+        query: str,
+        num_results: int
+    ) -> Dict[str, List[Dict]]:
+        """
+        并发搜索多个引擎
+        
+        Args:
+            engines: 搜索引擎列表
+            query: 搜索查询
+            num_results: 每个引擎的结果数量
+            
+        Returns:
+            {engine_type: [results]} 字典
+        """
+        # 创建并发任务
+        tasks = [
+            self._search_single_engine(engine, query, num_results)
+            for engine in engines
+        ]
+        
+        # 并发执行所有搜索
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 收集结果
+        all_engine_results = {}
+        errors = []
+        
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Concurrent search task failed: {result}")
+                errors.append(str(result))
+            else:
+                engine_type, engine_results, error = result
+                if error:
+                    errors.append(f"{engine_type}: {error}")
+                if engine_results:
+                    all_engine_results[engine_type] = engine_results
+        
+        if errors:
+            logger.warning(
+                f"Some engines failed during concurrent search: "
+                f"{', '.join(errors)}"
+            )
+        
+        logger.info(
+            f"Concurrent search completed: "
+            f"{len(all_engine_results)}/{len(engines)} engines succeeded"
+        )
+        
+        return all_engine_results
     
     async def _search_with_retry(
         self,
