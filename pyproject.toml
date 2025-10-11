@@ -1,6 +1,6 @@
 [project]
 name = "crawl4ai_mcp_server"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP Server for Crawl4AI"
 dependencies = [
     "mcp>=1.2.0",
