@@ -194,7 +194,7 @@ async def health_check() -> str:
         
         health_data = {
             "status": "healthy",
-            "version": "0.5.0",
+            "version": "0.5.1",
             "uptime_seconds": round(uptime_seconds, 2),
             "uptime_hours": round(uptime_hours, 2),
             "components": {
@@ -316,7 +316,7 @@ async def metrics() -> str:
         metrics_data = {
             "service": {
                 "uptime_seconds": round(uptime_seconds, 2),
-                "version": "0.5.0"
+                "version": "0.5.1"
             },
             "system": {
                 "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -538,7 +538,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.5.0"
+                "version": "0.5.1"
             }
         
         # 确保输出目录存在

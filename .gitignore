@@ -52,3 +52,10 @@ output/
 .mypy_cache/
 .pytest_cache/
 *.pyc
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
