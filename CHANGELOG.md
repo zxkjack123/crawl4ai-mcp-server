@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2025-10-11
+
+### Tested
+- ✅ **Full test suite validation** after tool consolidation
+- ✅ Unit tests: 21/21 passed (100%)
+- ✅ Persistent cache: 7/7 passed (100%)
+- ✅ Health checks: 4/4 passed (100%) - including new `check_type="all"`
+- ✅ Export functionality: 4/4 passed (100%)
+- **Total: 36/36 tests passing** (100% success rate)
+
+### Verified
+- Tool consolidation working correctly
+- All `system_status` check types functioning: health, readiness, metrics, all
+- No regressions from v0.5.3 changes
+- Cache persistence maintained
+- Export functionality intact
+
 ## [0.5.3] - 2025-10-11
 
 ### Changed

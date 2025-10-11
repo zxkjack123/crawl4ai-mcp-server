@@ -8,13 +8,13 @@
 
 ## 📊 Test Summary
 
-| Test Suite | Tests | Passed | Failed | Coverage | Status |
-|------------|-------|--------|--------|----------|--------|
-| Unit Tests (utils) | 21 | 21 | 0 | 81% | ✅ PASS |
-| Persistent Cache | 7 | 7 | 0 | 100% | ✅ PASS |
-| Health Checks | 3 | 3 | 0 | 100% | ✅ PASS |
-| Export Functionality | 4 | 4 | 0 | 100% | ✅ PASS |
-| **Total** | **35** | **35** | **0** | **N/A** | **✅ ALL PASS** |
+| Test Suite           | Tests  | Passed | Failed | Coverage | Status         |
+| -------------------- | ------ | ------ | ------ | -------- | -------------- |
+| Unit Tests (utils)   | 21     | 21     | 0      | 81%      | ✅ PASS         |
+| Persistent Cache     | 7      | 7      | 0      | 100%     | ✅ PASS         |
+| Health Checks        | 3      | 3      | 0      | 100%     | ✅ PASS         |
+| Export Functionality | 4      | 4      | 0      | 100%     | ✅ PASS         |
+| **Total**            | **35** | **35** | **0**  | **N/A**  | **✅ ALL PASS** |
 
 ---
 
