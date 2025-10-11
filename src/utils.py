@@ -343,19 +343,25 @@ class MultiRateLimiter:
         """
         if configs is None:
             # 默认配置（基于各引擎的实际限制）
+            # 注意：DuckDuckGo 和 SearXNG 如果是自托管，
+            # 可以设置很大的限额或完全不限制
             configs = {
                 "google": RateLimitConfig(
                     max_requests=100, time_window=86400
-                ),  # 100/天
+                ),  # 100/天 (Google API 限制)
                 "brave": RateLimitConfig(
                     max_requests=2000, time_window=2592000
-                ),  # 2000/月
+                ),  # 2000/月 (Brave API 限制)
+                # DuckDuckGo: 开源免费，无官方限制
+                # 设置宽松限制只是为了防止过度请求
                 "duckduckgo": RateLimitConfig(
-                    max_requests=60, time_window=60
-                ),  # 60/分钟（保守估计）
+                    max_requests=1000, time_window=60
+                ),  # 1000/分钟（非常宽松）
+                # SearXNG: 自托管实例，无限制
+                # 设置宽松限制只是为了保护服务器
                 "searxng": RateLimitConfig(
-                    max_requests=100, time_window=60
-                ),  # 100/分钟（可根据实例配置调整）
+                    max_requests=1000, time_window=60
+                ),  # 1000/分钟（非常宽松）
             }
         
         self.limiters: Dict[str, RateLimiter] = {

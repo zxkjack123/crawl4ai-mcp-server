@@ -58,12 +58,12 @@ for result in results:
 
 #### 配置参数
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `max_attempts` | 3 | 最大尝试次数 |
-| `initial_delay` | 1.0 秒 | 初始延迟时间 |
-| `max_delay` | 60.0 秒 | 最大延迟时间 |
-| `exponential_base` | 2.0 | 指数退避基数 |
+| 参数               | 默认值  | 说明         |
+| ------------------ | ------- | ------------ |
+| `max_attempts`     | 3       | 最大尝试次数 |
+| `initial_delay`    | 1.0 秒  | 初始延迟时间 |
+| `max_delay`        | 60.0 秒 | 最大延迟时间 |
+| `exponential_base` | 2.0     | 指数退避基数 |
 
 #### 使用示例
 
@@ -190,12 +190,12 @@ manager.export_performance_report("reports/performance.json")
 
 #### API 方法
 
-| 方法 | 说明 |
-|------|------|
-| `get_performance_stats()` | 获取整体性能统计 |
-| `get_engine_stats(engine)` | 获取指定引擎统计 |
-| `get_recent_searches(limit)` | 获取最近搜索记录 |
-| `export_performance_report(filepath)` | 导出详细报告 |
+| 方法                                  | 说明             |
+| ------------------------------------- | ---------------- |
+| `get_performance_stats()`             | 获取整体性能统计 |
+| `get_engine_stats(engine)`            | 获取指定引擎统计 |
+| `get_recent_searches(limit)`          | 获取最近搜索记录 |
+| `export_performance_report(filepath)` | 导出详细报告     |
 
 ---
 
@@ -212,12 +212,17 @@ manager.export_performance_report("reports/performance.json")
 
 #### 默认限流配置
 
-| 引擎 | 限制 | 说明 |
-|------|------|------|
-| **Google** | 100 次/天 | Google Custom Search API 免费配额 |
-| **Brave** | 2000 次/月 | Brave Search API 免费配额 |
-| **DuckDuckGo** | 60 次/分钟 | 保守估计，避免被限制 |
-| **SearXNG** | 100 次/分钟 | 根据实例配置可调整 |
+| 引擎           | 限制          | 说明                                             |
+| -------------- | ------------- | ------------------------------------------------ |
+| **Google**     | 100 次/天     | Google Custom Search API 免费配额                |
+| **Brave**      | 2000 次/月    | Brave Search API 免费配额                        |
+| **DuckDuckGo** | 1000 次/分钟  | 开源免费无限制，设置宽松限制仅为防止过度请求     |
+| **SearXNG**    | 1000 次/分钟  | 自托管实例无限制，设置宽松限制仅为保护服务器资源 |
+
+**注意**：
+- DuckDuckGo 和 SearXNG 的默认限制非常宽松（1000/分钟），实际上几乎不会触发
+- 如果你自托管 SearXNG，可以根据服务器性能调整限制或完全禁用
+- 只有 Google 和 Brave 需要严格限流以保护 API 配额
 
 #### 工作原理
 
@@ -272,15 +277,24 @@ brave:
 ```python
 from src.utils import RateLimitConfig, MultiRateLimiter
 
-# 自定义限流配置
+# 示例 1: 自定义限流配置
 configs = {
     "google": RateLimitConfig(
         max_requests=200,    # 200 次
         time_window=86400    # 每天
     ),
-    "custom_api": RateLimitConfig(
-        max_requests=1000,   # 1000 次
-        time_window=3600     # 每小时
+    "brave": RateLimitConfig(
+        max_requests=5000,   # 如果你是付费用户
+        time_window=2592000  # 每月
+    ),
+    # DuckDuckGo 和 SearXNG 设置超大限额（等同于不限制）
+    "duckduckgo": RateLimitConfig(
+        max_requests=100000,  # 10万次
+        time_window=60        # 每分钟
+    ),
+    "searxng": RateLimitConfig(
+        max_requests=100000,  # 10万次（自托管无限制）
+        time_window=60        # 每分钟
     )
 }
 
@@ -289,6 +303,23 @@ limiter = MultiRateLimiter(configs)
 
 # 使用
 await limiter.acquire("google")  # 阻塞直到获得令牌
+
+# 示例 2: 只对有 API 限制的引擎启用限流
+# 完全不限制 DuckDuckGo 和 SearXNG
+configs_minimal = {
+    "google": RateLimitConfig(max_requests=100, time_window=86400),
+    "brave": RateLimitConfig(max_requests=2000, time_window=2592000),
+    # 不添加 duckduckgo 和 searxng 配置，
+    # 它们会自动跳过限流检查
+}
+limiter_minimal = MultiRateLimiter(configs_minimal)
+
+# 示例 3: 在 SearchManager 中完全禁用限流
+manager = SearchManager(
+    enable_cache=True,
+    enable_rate_limit=False,  # 完全禁用限流
+    enable_monitoring=True
+)
 ```
 
 ---
@@ -344,13 +375,13 @@ print(manager.get_rate_limit_status())
 
 ### 功能启用前后对比
 
-| 指标 | Phase 1 | Phase 2 | 改进 |
-|------|---------|---------|------|
-| **重复结果** | 可能有重复 | 0 重复 | ✅ 100% |
-| **故障恢复** | 立即失败 | 自动重试 3 次 | ✅ +200% |
-| **API 超限风险** | 高风险 | 自动保护 | ✅ 0 风险 |
-| **性能可见性** | 无监控 | 完整监控 | ✅ 100% 可见 |
-| **请求成功率** | ~85% | ~95% | ✅ +10% |
+| 指标             | Phase 1    | Phase 2       | 改进        |
+| ---------------- | ---------- | ------------- | ----------- |
+| **重复结果**     | 可能有重复 | 0 重复        | ✅ 100%      |
+| **故障恢复**     | 立即失败   | 自动重试 3 次 | ✅ +200%     |
+| **API 超限风险** | 高风险     | 自动保护      | ✅ 0 风险    |
+| **性能可见性**   | 无监控     | 完整监控      | ✅ 100% 可见 |
+| **请求成功率**   | ~85%       | ~95%          | ✅ +10%      |
 
 ### 实际测试结果
 
