@@ -3,9 +3,18 @@ import httpx
 import json
 import os
 import logging
+import time
 from abc import ABC, abstractmethod
 from duckduckgo_search import DDGS
-from cache import SearchCache
+from src.cache import SearchCache
+from src.utils import (
+    async_retry, MultiRateLimiter, RateLimitConfig,
+    merge_and_deduplicate, deduplicate_results
+)
+from src.monitor import (
+    PerformanceMonitor, SearchMetrics, get_monitor,
+    initialize_monitoring
+)
 
 logger = logging.getLogger(__name__)
 
@@ -299,24 +308,45 @@ class SearXNGSearch(SearchEngine):
 
 
 class SearchManager:
-    def __init__(self, enable_cache: bool = True, cache_ttl: int = 3600):
+    def __init__(
+        self,
+        enable_cache: bool = True,
+        cache_ttl: int = 3600,
+        enable_rate_limit: bool = True,
+        enable_monitoring: bool = True
+    ):
         """
         初始化搜索管理器
 
         Args:
             enable_cache: 是否启用搜索缓存
             cache_ttl: 缓存过期时间（秒），默认1小时
+            enable_rate_limit: 是否启用API限流保护
+            enable_monitoring: 是否启用性能监控
         """
         self.engines: List[SearchEngine] = []
         self.fallback_engines: List[SearchEngine] = []
         self.enable_cache = enable_cache
         self.cache = SearchCache(ttl=cache_ttl) if enable_cache else None
+        
+        # 初始化限流器
+        self.enable_rate_limit = enable_rate_limit
+        self.rate_limiter = MultiRateLimiter() if enable_rate_limit else None
+        
+        # 初始化监控
+        self.enable_monitoring = enable_monitoring
+        self.monitor = get_monitor() if enable_monitoring else None
+        
         self._initialize_engines()
 
         if self.cache:
             logger.info(
                 f"Search cache enabled: ttl={cache_ttl}s"
             )
+        if self.rate_limiter:
+            logger.info("API rate limiting enabled")
+        if self.monitor:
+            logger.info("Performance monitoring enabled")
 
     def _initialize_engines(self):
         # 总是添加DuckDuckGo作为默认回退引擎
@@ -389,7 +419,7 @@ class SearchManager:
             engine: str = "auto"
     ) -> List[Dict]:
         """
-        执行搜索，支持自动回退机制和缓存
+        执行搜索，支持自动回退机制、缓存、限流和监控
 
         Args:
             query: 搜索查询字符串
@@ -397,22 +427,58 @@ class SearchManager:
             engine: 搜索引擎选择 (auto/brave/google/duckduckgo/searxng/all)
                    - auto: 自动选择，优先使用配置的引擎，失败时自动回退
                    - brave/google/duckduckgo/searxng: 使用指定引擎
-                   - all: 使用所有可用引擎
+                   - all: 使用所有可用引擎，自动去重和排序
 
         Returns:
             搜索结果列表
         """
+        start_time = time.time()
+        cached = False
+        success = False
+        error_msg = None
+        
         # 检查缓存
         if self.cache:
             cached_results = self.cache.get(query, engine, num_results)
             if cached_results is not None:
+                cached = True
+                success = True
                 logger.info("Returning cached results")
+                
+                # 记录监控指标（缓存命中）
+                if self.monitor:
+                    metrics = SearchMetrics(
+                        query=query,
+                        engine=engine,
+                        start_time=start_time,
+                        end_time=time.time(),
+                        success=True,
+                        cached=True,
+                        num_results=len(cached_results)
+                    )
+                    self.monitor.record_search(metrics)
+                
                 return cached_results
 
         all_results = []
 
         if not self.engines and not self.fallback_engines:
             logger.warning("No search engines available")
+            error_msg = "No search engines available"
+            
+            # 记录监控指标（失败）
+            if self.monitor:
+                metrics = SearchMetrics(
+                    query=query,
+                    engine=engine,
+                    start_time=start_time,
+                    end_time=time.time(),
+                    success=False,
+                    cached=False,
+                    error=error_msg
+                )
+                self.monitor.record_search(metrics)
+            
             return []
 
         logger.info(
@@ -463,21 +529,51 @@ class SearchManager:
             )
             engines_to_try = self.fallback_engines
 
+        # 用于收集所有引擎的结果（all 模式）
+        all_engine_results = {}
+        
         # 尝试每个引擎进行搜索
         for search_engine in engines_to_try:
             engine_name = search_engine.__class__.__name__
+            engine_type = engine_name.lower()
+            
+            # 获取引擎类型标识
+            if 'brave' in engine_type:
+                engine_type = 'brave'
+            elif 'duckduckgo' in engine_type:
+                engine_type = 'duckduckgo'
+            elif 'google' in engine_type:
+                engine_type = 'google'
+            elif 'searxng' in engine_type:
+                engine_type = 'searxng'
 
             try:
-                results = await search_engine.search(query, num_results)
+                # 检查限流
+                if self.rate_limiter:
+                    await self.rate_limiter.acquire(engine_type)
+                
+                # 执行搜索（自动重试）
+                results = await self._search_with_retry(
+                    search_engine, query, num_results
+                )
+                
                 logger.info(
                     f"Got {len(results)} results from {engine_name}"
                 )
 
                 if results:
-                    logger.info(f"First result type: {type(results[0])}")
                     converted_results = [r.to_dict() for r in results]
-                    logger.info(f"Converted results: {converted_results}")
-                    all_results.extend(converted_results)
+                    
+                    # 为结果添加引擎标识
+                    for result in converted_results:
+                        if 'engine' not in result:
+                            result['engine'] = engine_type
+                    
+                    if engine.lower() == "all":
+                        # all 模式：收集所有结果，稍后合并去重
+                        all_engine_results[engine_type] = converted_results
+                    else:
+                        all_results.extend(converted_results)
 
                     # 如果是 auto 模式且已获得足够结果，
                     # 则停止尝试其他引擎
@@ -488,6 +584,7 @@ class SearchManager:
                             f"Got enough results from {engine_name}, "
                             f"stopping"
                         )
+                        success = True
                         break
                 else:
                     logger.warning(
@@ -500,6 +597,7 @@ class SearchManager:
                     f"Search failed for {engine_name}: {str(e)}",
                     exc_info=True
                 )
+                error_msg = str(e)
                 # 继续尝试下一个引擎
                 if engine.lower() == "auto":
                     logger.info(
@@ -507,16 +605,65 @@ class SearchManager:
                         f"{engine_name} failure"
                     )
 
-        final_results = all_results[:num_results]
-        logger.info(f"Returning {len(final_results)} total results")
+        # 处理 all 模式：合并去重和排序
+        if engine.lower() == "all" and all_engine_results:
+            logger.info(
+                f"Merging results from {len(all_engine_results)} engines"
+            )
+            all_results = merge_and_deduplicate(
+                all_engine_results,
+                num_results=num_results
+            )
+            success = len(all_results) > 0
+        elif engine.lower() != "all":
+            # 非 all 模式：简单截取
+            final_results = all_results[:num_results]
+            all_results = final_results
+            success = len(all_results) > 0
+        
+        # 缓存结果
+        if self.cache and all_results:
+            self.cache.set(query, engine, num_results, all_results)
 
-        if not final_results:
-            logger.warning("All search engines failed to return results")
-        elif self.cache:
-            # 缓存结果
-            self.cache.set(query, engine, num_results, final_results)
+        # 记录监控指标
+        if self.monitor:
+            metrics = SearchMetrics(
+                query=query,
+                engine=engine,
+                start_time=start_time,
+                end_time=time.time(),
+                success=success,
+                cached=False,
+                num_results=len(all_results),
+                error=error_msg if not success else None
+            )
+            self.monitor.record_search(metrics)
 
-        return final_results
+        return all_results
+    
+    async def _search_with_retry(
+        self,
+        search_engine: SearchEngine,
+        query: str,
+        num_results: int
+    ) -> List[SearchResult]:
+        """
+        带重试机制的搜索
+        
+        Args:
+            search_engine: 搜索引擎实例
+            query: 搜索查询
+            num_results: 结果数量
+            
+        Returns:
+            搜索结果列表
+        """
+        # 使用重试装饰器
+        @async_retry(max_attempts=3, initial_delay=1.0, exponential_base=2.0)
+        async def _do_search():
+            return await search_engine.search(query, num_results)
+        
+        return await _do_search()
 
     def get_cache_stats(self) -> Dict:
         """
@@ -557,3 +704,72 @@ class SearchManager:
         if self.cache:
             return self.cache.import_from_file(filepath)
         return 0
+    
+    def get_rate_limit_status(self) -> Dict:
+        """
+        获取所有引擎的限流状态
+        
+        Returns:
+            限流状态字典，如果限流未启用则返回空字典
+        """
+        if self.rate_limiter:
+            return self.rate_limiter.get_all_status()
+        return {}
+    
+    def get_performance_stats(
+        self,
+        engine: str = None
+    ) -> Dict:
+        """
+        获取性能统计信息
+        
+        Args:
+            engine: 引擎名（可选，None 表示所有引擎）
+            
+        Returns:
+            性能统计字典
+        """
+        if self.monitor:
+            if engine:
+                return self.monitor.get_engine_stats(engine)
+            else:
+                return self.monitor.get_overall_stats()
+        return {}
+    
+    def get_engine_stats(self, engine: str = None) -> Dict:
+        """
+        获取引擎级别的统计信息
+        
+        Args:
+            engine: 引擎名（可选）
+            
+        Returns:
+            引擎统计字典
+        """
+        if self.monitor:
+            return self.monitor.get_engine_stats(engine)
+        return {}
+    
+    def export_performance_report(self, filepath: str) -> None:
+        """
+        导出性能报告到文件
+        
+        Args:
+            filepath: 输出文件路径
+        """
+        if self.monitor:
+            self.monitor.export_report(filepath)
+    
+    def get_recent_searches(self, limit: int = 10) -> List[Dict]:
+        """
+        获取最近的搜索记录
+        
+        Args:
+            limit: 返回的记录数量
+            
+        Returns:
+            最近搜索列表
+        """
+        if self.monitor:
+            return self.monitor.get_recent_searches(limit)
+        return []

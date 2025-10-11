@@ -9,7 +9,7 @@ from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
 from crawl4ai import CacheMode
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from search import SearchManager
+from src.search import SearchManager
 
 mcp = FastMCP("Crawl4AI")
 
