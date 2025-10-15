@@ -6,7 +6,11 @@ import os
 import logging
 import time
 from abc import ABC, abstractmethod
-from duckduckgo_search import DDGS
+# Prefer the new 'ddgs' package and fall back to the legacy name if needed
+try:
+    from ddgs import DDGS  # new package name (no deprecation warning)
+except Exception:  # pragma: no cover - fallback for environments without ddgs
+    from duckduckgo_search import DDGS  # legacy package name
 
 # Use relative import or direct import depending on context
 try:
@@ -69,8 +73,10 @@ class DuckDuckGoSearch(SearchEngine):
         try:
             # 使用duckduckgo_search库进行搜索
             # 设置region为wt-wt(全球),safesearch为moderate(适中)
+            # Use positional first arg to be compatible with both
+            # ddgs and duckduckgo_search packages
             raw_results = self.ddgs.text(
-                keywords=query,
+                query,
                 region="wt-wt",
                 safesearch="moderate",
                 max_results=num_results
@@ -97,10 +103,12 @@ class DuckDuckGoSearch(SearchEngine):
 
 
 class GoogleSearch(SearchEngine):
-    def __init__(self, api_key: str, cse_id: str):
+    def __init__(self, api_key: str, cse_id: str, proxy: Optional[str] = None):
         self.api_key = api_key
         self.cse_id = cse_id
         self.base_url = "https://www.googleapis.com/customsearch/v1"
+        # Optional proxy URL from config.json (has priority over env)
+        self.proxy = proxy
 
     async def search(
         self, query: str, num_results: int = 10
@@ -109,56 +117,101 @@ class GoogleSearch(SearchEngine):
             logger.warning("Google search credentials not configured")
             return []
 
-        # Use HTTP proxy if available, ignore socks5 proxy
-        import os
-        proxies = None
-        http_proxy = (
-            os.environ.get('HTTP_PROXY') or
-            os.environ.get('http_proxy')
-        )
-        https_proxy = (
-            os.environ.get('HTTPS_PROXY') or
-            os.environ.get('https_proxy')
-        )
-        
-        if http_proxy and http_proxy.startswith('http'):
-            proxies = {
-                "http://": http_proxy,
-                "https://": https_proxy or http_proxy
-            }
-        
-        async with httpx.AsyncClient(timeout=30.0, proxies=proxies) as client:
-            try:
-                params = {
-                    'key': self.api_key,
-                    'cx': self.cse_id,
-                    'q': query,
-                    'num': min(num_results, 10)
-                }
-                
-                logger.info(f"Sending request to Google: {query}")
+        # Prepare request params once
+        params = {
+            'key': self.api_key,
+            'cx': self.cse_id,
+            'q': query,
+            'num': min(num_results, 10)
+        }
+
+        # Strategy: try direct first; on network error, retry via proxy
+        async def _request_with_proxy(proxy_url: Optional[str]):
+            async with httpx.AsyncClient(
+                timeout=30.0, proxy=proxy_url, trust_env=False
+            ) as client:
                 response = await client.get(self.base_url, params=params)
                 response.raise_for_status()
-                data = response.json()
-                logger.info("Google search request successful")
-            except Exception as e:
-                logger.error(f"Google search failed: {str(e)}")
-                return []
-            
-            results = []
-            for item in data.get('items', []):
-                results.append(SearchResult(
-                    title=item.get('title', ''),
-                    link=item.get('link', ''),
-                    snippet=item.get('snippet', ''),
-                    source='google'
-                ))
-                
-            return results
+                return response.json()
+
+        def _env_proxy() -> Optional[str]:
+            https_proxy = (
+                os.environ.get('HTTPS_PROXY') or
+                os.environ.get('https_proxy')
+            )
+            http_proxy = (
+                os.environ.get('HTTP_PROXY') or
+                os.environ.get('http_proxy')
+            )
+            for p in (https_proxy, http_proxy):
+                if p and (p.startswith('http://') or p.startswith('https://')):
+                    return p
+            return None
+
+        try:
+            logger.info(f"Sending Google request (direct): {query}")
+            data = await _request_with_proxy(None)
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            if self.proxy:
+                logger.warning(
+                    "Direct Google request failed (%s); retrying via proxy",
+                    e.__class__.__name__
+                )
+                try:
+                    data = await _request_with_proxy(self.proxy)
+                except Exception as e2:
+                    logger.error(f"Google search failed via proxy: {str(e2)}")
+                    return []
+            else:
+                # Try environment proxy as a fallback
+                env_p = _env_proxy()
+                if env_p:
+                    logger.warning(
+                        "Direct Google request failed (%s); "
+                        "retrying via env proxy",
+                        e.__class__.__name__
+                    )
+                    try:
+                        data = await _request_with_proxy(env_p)
+                    except Exception as e2:
+                        logger.error(
+                            "Google search failed via env proxy: %s",
+                            str(e2)
+                        )
+                        return []
+                else:
+                    logger.error(
+                        "Google search failed (no proxy configured): %s",
+                        str(e)
+                    )
+                    return []
+        except httpx.HTTPStatusError as e:
+            # HTTP errors like 4xx/5xx won't be fixed by proxy; don't retry
+            logger.error(
+                "Google search HTTP error: %s - %s",
+                e.response.status_code,
+                e.response.text[:200]
+            )
+            return []
+        except Exception as e:
+            logger.error(f"Google search failed: {str(e)}")
+            return []
+
+        results = []
+        for item in data.get('items', []):
+            results.append(SearchResult(
+                title=item.get('title', ''),
+                link=item.get('link', ''),
+                snippet=item.get('snippet', ''),
+                source='google'
+            ))
+
+        logger.info("Google search request successful")
+        return results
 
 
 class BraveSearch(SearchEngine):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, proxy: Optional[str] = None):
         """
         初始化 Brave Search 搜索引擎
 
@@ -167,6 +220,7 @@ class BraveSearch(SearchEngine):
         """
         self.api_key = api_key
         self.base_url = "https://api.search.brave.com/res/v1/web/search"
+        self.proxy = proxy
 
     async def search(
         self, query: str, num_results: int = 10
@@ -186,45 +240,83 @@ class BraveSearch(SearchEngine):
             return []
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                headers = {
-                    'Accept': 'application/json',
-                    'X-Subscription-Token': self.api_key
-                }
+            headers = {
+                'Accept': 'application/json',
+                'X-Subscription-Token': self.api_key
+            }
 
-                params = {
-                    'q': query,
-                    'count': min(num_results, 20)
-                }
+            params = {
+                'q': query,
+                'count': min(num_results, 20)
+            }
 
-                logger.info(
-                    f"Sending request to Brave Search: {query}"
+            async def _do_request(proxy_url: Optional[str]):
+                async with httpx.AsyncClient(
+                    timeout=30.0, proxy=proxy_url, trust_env=False
+                ) as client:
+                    return await client.get(
+                        self.base_url, headers=headers, params=params
+                    )
+
+            def _env_proxy() -> Optional[str]:
+                https_proxy = (
+                    os.environ.get('HTTPS_PROXY') or
+                    os.environ.get('https_proxy')
                 )
-
-                response = await client.get(
-                    self.base_url,
-                    headers=headers,
-                    params=params
+                http_proxy = (
+                    os.environ.get('HTTP_PROXY') or
+                    os.environ.get('http_proxy')
                 )
-                response.raise_for_status()
-                data = response.json()
+                for p in (https_proxy, http_proxy):
+                    if p and (
+                        p.startswith('http://') or
+                        p.startswith('https://')
+                    ):
+                        return p
+                return None
 
-                results = []
-                web_results = data.get('web', {}).get('results', [])
-                logger.info(
-                    f"Brave Search successful, "
-                    f"got {len(web_results)} results"
-                )
+            logger.info(f"Sending request to Brave Search (direct): {query}")
+            try:
+                response = await _do_request(None)
+            except (httpx.RequestError, httpx.TimeoutException) as e:
+                if self.proxy:
+                    logger.warning(
+                        "Direct Brave request failed (%s); "
+                        "retrying via proxy",
+                        e.__class__.__name__
+                    )
+                    response = await _do_request(self.proxy)
+                else:
+                    env_p = _env_proxy()
+                    if env_p:
+                        logger.warning(
+                            "Direct Brave request failed (%s); "
+                            "retrying via env proxy",
+                            e.__class__.__name__
+                        )
+                        response = await _do_request(env_p)
+                    else:
+                        raise
 
-                for item in web_results[:num_results]:
-                    results.append(SearchResult(
-                        title=item.get('title', ''),
-                        link=item.get('url', ''),
-                        snippet=item.get('description', ''),
-                        source='brave'
-                    ))
+            response.raise_for_status()
+            data = response.json()
 
-                return results
+            results = []
+            web_results = data.get('web', {}).get('results', [])
+            logger.info(
+                f"Brave Search successful, "
+                f"got {len(web_results)} results"
+            )
+
+            for item in web_results[:num_results]:
+                results.append(SearchResult(
+                    title=item.get('title', ''),
+                    link=item.get('url', ''),
+                    snippet=item.get('description', ''),
+                    source='brave'
+                ))
+
+            return results
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
@@ -246,7 +338,8 @@ class SearXNGSearch(SearchEngine):
     def __init__(
         self,
         base_url: str = "http://localhost:8080",
-        language: str = "zh-CN"
+        language: str = "zh-CN",
+        proxy: Optional[str] = None
     ):
         """
         初始化 SearXNG 搜索引擎
@@ -259,6 +352,7 @@ class SearXNGSearch(SearchEngine):
         """
         self.base_url = base_url.rstrip('/')
         self.language = language
+        self.proxy = proxy
 
     async def search(
         self, query: str, num_results: int = 10
@@ -274,40 +368,83 @@ class SearXNGSearch(SearchEngine):
             搜索结果列表
         """
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                params = {
-                    'q': query,
-                    'format': 'json',
-                    'language': self.language,
-                    'pageno': 1
-                }
-                
-                search_url = f"{self.base_url}/search"
-                logger.info(
-                    f"Sending request to SearXNG: "
-                    f"{search_url} with query: {query}"
+            params = {
+                'q': query,
+                'format': 'json',
+                'language': self.language,
+                'pageno': 1
+            }
+
+            search_url = f"{self.base_url}/search"
+            logger.info(
+                "Sending request to SearXNG (direct): %s with query: %s",
+                search_url,
+                query
+            )
+
+            async def _do_request(proxy_url: Optional[str]):
+                async with httpx.AsyncClient(
+                    timeout=30.0, proxy=proxy_url, trust_env=False
+                ) as client:
+                    return await client.get(search_url, params=params)
+
+            def _env_proxy() -> Optional[str]:
+                https_proxy = (
+                    os.environ.get('HTTPS_PROXY') or
+                    os.environ.get('https_proxy')
                 )
-
-                response = await client.get(search_url, params=params)
-                response.raise_for_status()
-                data = response.json()
-
-                results_count = len(data.get('results', []))
-                logger.info(
-                    f"SearXNG search successful, "
-                    f"got {results_count} results"
+                http_proxy = (
+                    os.environ.get('HTTP_PROXY') or
+                    os.environ.get('http_proxy')
                 )
+                for p in (https_proxy, http_proxy):
+                    if p and (
+                        p.startswith('http://') or
+                        p.startswith('https://')
+                    ):
+                        return p
+                return None
 
-                results = []
-                for item in data.get('results', [])[:num_results]:
-                    results.append(SearchResult(
-                        title=item.get('title', ''),
-                        link=item.get('url', ''),
-                        snippet=item.get('content', ''),
-                        source='searxng'
-                    ))
+            try:
+                response = await _do_request(None)
+            except (httpx.RequestError, httpx.TimeoutException) as e:
+                if self.proxy:
+                    logger.warning(
+                        "Direct SearXNG request failed (%s); "
+                        "retrying via proxy",
+                        e.__class__.__name__
+                    )
+                    response = await _do_request(self.proxy)
+                else:
+                    env_p = _env_proxy()
+                    if env_p:
+                        logger.warning(
+                            "Direct SearXNG request failed (%s); "
+                            "retrying via env proxy",
+                            e.__class__.__name__
+                        )
+                        response = await _do_request(env_p)
+                    else:
+                        raise
 
-                return results
+            response.raise_for_status()
+            data = response.json()
+
+            results_count = len(data.get('results', []))
+            logger.info(
+                f"SearXNG search successful, got {results_count} results"
+            )
+
+            results = []
+            for item in data.get('results', [])[:num_results]:
+                results.append(SearchResult(
+                    title=item.get('title', ''),
+                    link=item.get('url', ''),
+                    snippet=item.get('content', ''),
+                    source='searxng'
+                ))
+
+            return results
 
         except httpx.HTTPError as e:
             logger.error(f"SearXNG HTTP error: {str(e)}")
@@ -371,17 +508,40 @@ class SearchManager:
         config_path = os.path.join(
             os.path.dirname(__file__), '..', 'config.json'
         )
+        proxy_from_config: Optional[str] = None
+        # Helper: pick proxy from config (string or {https,http})
+        
+        def _extract_proxy(cfg: Dict) -> Optional[str]:
+            proxy_cfg = cfg.get('proxy')
+            if not proxy_cfg:
+                return None
+            if isinstance(proxy_cfg, str):
+                return proxy_cfg
+            if isinstance(proxy_cfg, dict):
+                # prefer https then http
+                https_p = proxy_cfg.get('https')
+                http_p = proxy_cfg.get('http')
+                return https_p or http_p
+            return None
+
         if os.path.exists(config_path):
             try:
                 with open(config_path, 'r') as f:
                     config = json.load(f)
+                # resolve proxy from config if present
+                proxy_from_config = _extract_proxy(config)
                     
                 # 添加 Brave Search 搜索（优先级最高）
                 if 'brave' in config:
                     brave_config = config['brave']
                     if brave_config.get('api_key'):
+                        brave_proxy = (
+                            _extract_proxy(brave_config) or
+                            proxy_from_config
+                        )
                         brave_engine = BraveSearch(
-                            api_key=brave_config['api_key']
+                            api_key=brave_config['api_key'],
+                            proxy=brave_proxy
                         )
                         self.engines.append(brave_engine)
                         logger.info("Brave Search engine initialized")
@@ -391,9 +551,14 @@ class SearchManager:
                     google_config = config['google']
                     if (google_config.get('api_key') and
                             google_config.get('cse_id')):
+                        google_proxy = (
+                            _extract_proxy(google_config) or
+                            proxy_from_config
+                        )
                         google_engine = GoogleSearch(
                             api_key=google_config['api_key'],
-                            cse_id=google_config['cse_id']
+                            cse_id=google_config['cse_id'],
+                            proxy=google_proxy
                         )
                         self.engines.append(google_engine)
                         self.fallback_engines.append(google_engine)
@@ -406,9 +571,14 @@ class SearchManager:
                         'base_url', 'http://localhost:8080'
                     )
                     language = searxng_config.get('language', 'zh-CN')
+                    searxng_proxy = (
+                        _extract_proxy(searxng_config) or
+                        proxy_from_config
+                    )
                     searxng_engine = SearXNGSearch(
                         base_url=base_url,
-                        language=language
+                        language=language,
+                        proxy=searxng_proxy
                     )
                     self.engines.append(searxng_engine)
                     self.fallback_engines.append(searxng_engine)
@@ -425,6 +595,10 @@ class SearchManager:
         if not self.engines:
             self.engines.append(duckduckgo)
             logger.info("No engines configured, using DuckDuckGo as default")
+
+    # Note: We don't inject env proxy here to preserve direct-first policy.
+    # Engines will try direct and only use configured proxy (from config.json)
+    # or an allowed env proxy explicitly on network failure.
                 
     async def search(
             self,
@@ -447,7 +621,6 @@ class SearchManager:
             搜索结果列表
         """
         start_time = time.time()
-        cached = False
         success = False
         error_msg = None
         
@@ -455,7 +628,6 @@ class SearchManager:
         if self.cache:
             cached_results = self.cache.get(query, engine, num_results)
             if cached_results is not None:
-                cached = True
                 success = True
                 logger.info("Returning cached results")
                 

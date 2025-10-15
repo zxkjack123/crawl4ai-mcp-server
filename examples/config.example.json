@@ -1,13 +1,22 @@
 {
+    "proxy": {
+        "https": "http://127.0.0.1:7890",
+        "http": "http://127.0.0.1:7890"
+    },
     "brave": {
-        "api_key": "YOUR_BRAVE_API_KEY_HERE"
+        "api_key": "YOUR_BRAVE_API_KEY_HERE",
+        "proxy": "http://127.0.0.1:7890"
     },
     "google": {
         "api_key": "YOUR_GOOGLE_API_KEY_HERE",
-        "cse_id": "YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE"
+        "cse_id": "YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE",
+        "proxy": {
+            "https": "http://127.0.0.1:7890"
+        }
     },
     "searxng": {
         "base_url": "http://localhost:8080",
-        "language": "zh-CN"
+        "language": "zh-CN",
+        "proxy": "http://127.0.0.1:7890"
     }
 }

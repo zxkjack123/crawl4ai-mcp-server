@@ -230,3 +230,18 @@ This ensures compatibility with:
 [0.5.0]: https://github.com/zxkjack123/crawl4ai-mcp-server/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/zxkjack123/crawl4ai-mcp-server/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/zxkjack123/crawl4ai-mcp-server/releases/tag/v0.3.0
+
+## [0.5.6] - 2025-10-15
+
+### Added
+- Config.json-driven proxy support with precedence: per-engine > global > env.
+- Direct-first network strategy; retry via proxy on network errors only.
+
+### Changed
+- Modernize httpx usage using `proxy=` and `trust_env=False` for direct attempts.
+- Prefer `ddgs` package with fallback to `duckduckgo_search`; update DuckDuckGo call
+  signature for compatibility.
+- Update `examples/config.example.json` to document proxy configuration.
+
+### Tested
+- Full test suite passing (66 tests).
