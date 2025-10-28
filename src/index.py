@@ -22,6 +22,10 @@ except ImportError:
 mcp = FastMCP("Crawl4AI")
 
 crawler = None
+# Lazily-created proxied crawler (used as fallback when direct fetch fails)
+crawler_proxy = None
+# Cache of resolved proxy URL for crawler (from config.json or env)
+crawler_proxy_url = None
 search_manager = None
 start_time = time.time()  # 记录服务启动时间
 
@@ -36,34 +40,121 @@ async def initialize_search_manager():
     )
 
 
+def _config_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "config.json"
+
+
+def _extract_proxy_from_cfg(cfg: dict) -> str | None:
+    """Extract a proxy URL from a config dict.
+
+    Accepts either a string or an object with {"https": ..., "http": ...}.
+    Prefers https over http. Returns None if not found/invalid.
+    """
+    if not cfg:
+        return None
+    proxy_cfg = cfg.get("proxy")
+    if not proxy_cfg:
+        return None
+    if isinstance(proxy_cfg, str):
+        return proxy_cfg
+    if isinstance(proxy_cfg, dict):
+        https_p = proxy_cfg.get("https")
+        http_p = proxy_cfg.get("http")
+        return https_p or http_p
+    return None
+
+
+def _env_proxy_http_https() -> str | None:
+    """Return http/https proxy from env if available (http/https only)."""
+    https_proxy = (
+        os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+    )
+    http_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+    for p in (https_proxy, http_proxy):
+        if p and (p.startswith("http://") or p.startswith("https://")):
+            return p
+    return None
+
+
+def _resolve_crawler_proxy_url() -> str | None:
+    """
+    Resolve the crawler proxy from config.json with global fallback,
+    else use environment variables.
+    """
+    try:
+        cfg_path = _config_path()
+        if cfg_path.exists():
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            # Per-crawler override
+            crawler_p = _extract_proxy_from_cfg(cfg.get("crawler", {}))
+            if crawler_p:
+                return crawler_p
+            # Global proxy fallback
+            global_p = _extract_proxy_from_cfg(cfg)
+            if global_p:
+                return global_p
+    except Exception as e:
+        print(
+            "Warning: failed to resolve crawler proxy from config.json: "
+            f"{e}"
+        )
+    # Lastly, try env
+    return _env_proxy_http_https()
+
+
 async def initialize_crawler():
-    global crawler
+    global crawler, crawler_proxy_url
+    if crawler is not None:
+        return
+    # Always initialize a direct (no-proxy) crawler first to honor
+    # direct-first policy
     browser_config = BrowserConfig(headless=True)
-    # md_generator can be configured at call site via run_config
     crawler = AsyncWebCrawler(config=browser_config)
     await crawler.__aenter__()
+    # Resolve proxy URL for possible later fallback use
+    # (lazy init of proxied crawler)
+    if crawler_proxy_url is None:
+        crawler_proxy_url = _resolve_crawler_proxy_url()
+
+
+async def initialize_crawler_proxy():
+    """Initialize the proxied crawler lazily when needed."""
+    global crawler_proxy
+    if crawler_proxy is not None:
+        return
+    if crawler_proxy_url:
+        proxy_cfg = BrowserConfig(headless=True, proxy=crawler_proxy_url)
+        crawler_proxy = AsyncWebCrawler(config=proxy_cfg)
+        await crawler_proxy.__aenter__()
 
 
 async def close_crawler():
-    global crawler
     if crawler:
         await crawler.__aexit__(None, None, None)
+    if crawler_proxy:
+        await crawler_proxy.__aexit__(None, None, None)
+
 
 @mcp.tool()
 async def read_url(url: str, format: str = "markdown_with_citations") -> str:
-    """Crawl a webpage and return its content in a specified format.
-    
+    """
+    Crawl a webpage and return its content in a specified format.
+
     Args:
         url: The URL to crawl
         format: The format of the content to return. Options:
             - raw_markdown: The basic HTML→Markdown conversion
-            - markdown_with_citations: Markdown including inline citations that reference links at the end
-            - references_markdown: The references/citations themselves (if citations=True)
-            - fit_markdown: The filtered/"fit" markdown if a content filter was used
+                        - markdown_with_citations: Markdown including inline
+                            citations that reference links at the end
+                        - references_markdown: The references/citations
+                            themselves (if citations=True)
+                        - fit_markdown: The filtered/"fit" markdown if a
+                            content filter was used
             - fit_html: The filtered HTML that generated fit_markdown
             - markdown: The default markdown format
     """
-    global crawler
+    global crawler_proxy_url
     if not crawler:
         await initialize_crawler()
     
@@ -76,51 +167,87 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
         )
     )
 
-    try:
-        result = await crawler.arun(url=url, config=run_config)
-        
-        content = None
+    def _extract_content(res_obj):
         if format == "raw_markdown":
-            content = result.markdown_v2.raw_markdown
+            return res_obj.markdown_v2.raw_markdown
         elif format == "markdown_with_citations":
-            content = result.markdown_v2.markdown_with_citations
+            return res_obj.markdown_v2.markdown_with_citations
         elif format == "references_markdown":
-            content = result.markdown_v2.references_markdown
+            return res_obj.markdown_v2.references_markdown
         elif format == "fit_markdown":
-            content = result.markdown_v2.fit_markdown
+            return res_obj.markdown_v2.fit_markdown
         elif format == "fit_html":
-            content = result.markdown_v2.fit_html
+            return res_obj.markdown_v2.fit_html
         else:
-            content = result.markdown_v2.markdown_with_citations
-        
-        # 确保内容是UTF-8编码的字符串
+            return res_obj.markdown_v2.markdown_with_citations
+
+    async def _run_with(cwlr):
+        res = await cwlr.arun(url=url, config=run_config)
+        content = _extract_content(res)
+        # ensure UTF-8 string
         if content is not None:
-            # 如果内容已经是字符串，确保它是UTF-8编码的
             if isinstance(content, str):
-                # 在Windows系统上，处理可能的编码问题
                 try:
-                    # 尝试将内容编码为UTF-8，然后解码回字符串
-                    # 这样可以确保内容是有效的UTF-8字符串
-                    content = content.encode('utf-8', errors='replace').decode('utf-8')
+                    content = (
+                        content.encode('utf-8', errors='replace')
+                        .decode('utf-8')
+                    )
                 except Exception as e:
-                    print(f"Warning: Error handling content encoding: {str(e)}")
+                    print(
+                        f"Warning: Error handling content encoding: {str(e)}"
+                    )
             else:
-                # 如果内容不是字符串，尝试将其转换为字符串
                 try:
                     content = str(content)
-                    content = content.encode('utf-8', errors='replace').decode('utf-8')
+                    content = (
+                        content.encode('utf-8', errors='replace')
+                        .decode('utf-8')
+                    )
                 except Exception as e:
-                    print(f"Warning: Error converting content to string: {str(e)}")
-                    content = f"Error: Could not convert content to string: {str(e)}"
-        
+                    print(
+                        "Warning: Error converting content to string: "
+                        f"{str(e)}"
+                    )
+                    content = (
+                        "Error: Could not convert content to string: "
+                        f"{str(e)}"
+                    )
         return content
+
+    # 1) Direct attempt (no proxy)
+    try:
+        return await _run_with(crawler)
     except Exception as e:
-        error_msg = f"Error crawling URL: {str(e)}"
-        print(error_msg)
-        return json.dumps({"error": error_msg}, ensure_ascii=False)
+        # 2) Retry via configured/env proxy if available
+        msg = str(e)
+        print(f"Direct crawl failed, considering proxy retry: {msg}")
+        if crawler_proxy is None and (
+            crawler_proxy_url or _env_proxy_http_https()
+        ):
+            if crawler_proxy_url is None:
+                # resolve once if not done earlier
+                # note: this will also consider env
+                resolved = _resolve_crawler_proxy_url()
+                if resolved:
+                    # cache it
+                    crawler_proxy_url = resolved
+            try:
+                await initialize_crawler_proxy()
+                return await _run_with(crawler_proxy)
+            except Exception as e2:
+                error_msg = f"Error crawling URL via proxy: {str(e2)}"
+                print(error_msg)
+                return json.dumps({"error": error_msg}, ensure_ascii=False)
+        else:
+            error_msg = f"Error crawling URL: {msg}"
+            print(error_msg)
+            return json.dumps({"error": error_msg}, ensure_ascii=False)
+
 
 @mcp.tool()
-async def search(query: str, num_results: int = 10, engine: str = "auto") -> str:
+async def search(
+    query: str, num_results: int = 10, engine: str = "auto"
+) -> str:
     """执行网络搜索并返回结果。
 
     Args:
@@ -134,11 +261,12 @@ async def search(query: str, num_results: int = 10, engine: str = "auto") -> str
             - "searxng": 使用SearXNG搜索(需要部署实例,完全免费无限制)
             - "all": 使用所有已配置的搜索引擎
     """
-    global search_manager
     try:
         await initialize_search_manager()
         if not search_manager or not search_manager.engines:
-            return json.dumps({"error": "No search engines available"}, ensure_ascii=False)
+            return json.dumps(
+                {"error": "No search engines available"}, ensure_ascii=False
+            )
             
         results = await search_manager.search(query, num_results, engine)
         print(f"Search results: {results}")  # 添加调试日志
@@ -147,7 +275,10 @@ async def search(query: str, num_results: int = 10, engine: str = "auto") -> str
         try:
             json_str = json.dumps(results, ensure_ascii=False, indent=2)
             # 在Windows系统上，处理可能的编码问题
-            json_str = json_str.encode('utf-8', errors='replace').decode('utf-8')
+            json_str = (
+                json_str.encode('utf-8', errors='replace')
+                .decode('utf-8')
+            )
             return json_str
         except Exception as e:
             error_msg = f"Error encoding search results: {str(e)}"
@@ -177,7 +308,7 @@ async def system_status(check_type: str = "health") -> str:
     Returns:
         JSON格式的状态信息
     """
-    global crawler, search_manager, start_time
+    # Using module-level state (crawler, search_manager, start_time)
     
     try:
         # 初始化搜索管理器（如果还未初始化）
@@ -207,7 +338,9 @@ async def system_status(check_type: str = "health") -> str:
                         "ready": crawler is not None
                     },
                     "search": {
-                        "status": "ready" if engines_count > 0 else "no_engines",
+                        "status": (
+                            "ready" if engines_count > 0 else "no_engines"
+                        ),
                         "engines_count": engines_count,
                         "engines": engines_list
                     }
@@ -225,13 +358,13 @@ async def system_status(check_type: str = "health") -> str:
             checks = {
                 "config_file": {
                     "status": "pass" if config_file.exists() else "fail",
-                    "message": "Config file exists" if config_file.exists() 
+                    "message": "Config file exists" if config_file.exists()
                               else "Config file not found"
                 },
                 "search_engines": {
                     "status": "pass" if engines_count > 0 else "fail",
-                    "message": f"{engines_count} engines available" 
-                              if engines_count > 0 
+                    "message": f"{engines_count} engines available"
+                              if engines_count > 0
                               else "No search engines configured"
                 },
                 "crawler": {
@@ -345,8 +478,6 @@ async def manage_cache(
     Returns:
         操作结果信息
     """
-    global search_manager
-    
     try:
         await initialize_search_manager()
         
@@ -470,8 +601,6 @@ async def export_search_results(
     Returns:
         导出操作的结果信息
     """
-    global search_manager
-    
     try:
         # 确保搜索管理器已初始化
         await initialize_search_manager()

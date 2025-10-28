@@ -232,26 +232,23 @@ This ensures compatibility with:
 [0.3.0]: https://github.com/zxkjack123/crawl4ai-mcp-server/releases/tag/v0.3.0
 
 ## [0.5.6] - 2025-10-15
-## [0.5.7] - 2025-10-28
-
-### Changed
-- Code cleanup: remove unused imports and variables in `src/index.py` and `src/search.py`.
-- Improve DuckDuckGo engine with optional proxy support and direct-first behavior.
-- Align version strings across system status and export metadata.
-
-### Tested
-- Full test suite passing (66 tests).
-
+## [0.5.7] - 2025-10-29
 
 ### Added
-- Config.json-driven proxy support with precedence: per-engine > global > env.
-- Direct-first network strategy; retry via proxy on network errors only.
+- Crawler explicit proxy support in `read_url`:
+  - New config precedence: `crawler.proxy` (per-crawler) > global `proxy` > env (HTTP[S]_PROXY)
+  - Direct-first attempt, then retry via proxy on network errors
+  - Lazy-init proxied crawler to avoid overhead when direct works
+  - Documented in `examples/config.example.json` (new `crawler.proxy` section)
+- Config.json-driven proxy for search engines (per-engine > global > env)
 
 ### Changed
-- Modernize httpx usage using `proxy=` and `trust_env=False` for direct attempts.
-- Prefer `ddgs` package with fallback to `duckduckgo_search`; update DuckDuckGo call
-  signature for compatibility.
-- Update `examples/config.example.json` to document proxy configuration.
+- Modernized `httpx` usage with `proxy=` and `trust_env=False` for clean direct attempts
+- Prefer `ddgs` package with fallback to `duckduckgo_search`; aligned DuckDuckGo call signature
+- Code cleanup: removed unused imports/`global` declarations; fixed long lines and minor spacing
+- Added `.flake8` (max-line-length=100; ignore W293) and resolved lints for `src/index.py` and `src/search.py`
+- Aligned version strings across system status and export metadata (0.5.7)
 
 ### Tested
-- Full test suite passing (66 tests).
+- Full test suite passing (66 tests)
+- Flake8 passes for `src/index.py` and `src/search.py` with repo config
