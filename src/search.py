@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, Tuple
+import inspect
 import asyncio
 import httpx
 import json
@@ -16,22 +17,20 @@ except Exception:  # pragma: no cover - fallback for environments without ddgs
 try:
     from .cache import SearchCache
     from .utils import (
-        async_retry, MultiRateLimiter, RateLimitConfig,
-        merge_and_deduplicate, deduplicate_results
+        async_retry, MultiRateLimiter,
+        merge_and_deduplicate
     )
     from .monitor import (
-        PerformanceMonitor, SearchMetrics, get_monitor,
-        initialize_monitoring
+        SearchMetrics, get_monitor
     )
 except ImportError:
     from cache import SearchCache
     from utils import (
-        async_retry, MultiRateLimiter, RateLimitConfig,
-        merge_and_deduplicate, deduplicate_results
+        async_retry, MultiRateLimiter,
+        merge_and_deduplicate
     )
     from monitor import (
-        PerformanceMonitor, SearchMetrics, get_monitor,
-        initialize_monitoring
+        SearchMetrics, get_monitor
     )
 
 logger = logging.getLogger(__name__)
@@ -64,42 +63,102 @@ class SearchEngine(ABC):
 
 
 class DuckDuckGoSearch(SearchEngine):
-    def __init__(self):
+    def __init__(self, proxy: Optional[str] = None):
         self.ddgs = DDGS()
+        self.proxy = proxy
 
     async def search(
         self, query: str, num_results: int = 10
     ) -> List[SearchResult]:
-        try:
-            # 使用duckduckgo_search库进行搜索
-            # 设置region为wt-wt(全球),safesearch为moderate(适中)
-            # Use positional first arg to be compatible with both
-            # ddgs and duckduckgo_search packages
-            raw_results = self.ddgs.text(
-                query,
-                region="wt-wt",
-                safesearch="moderate",
-                max_results=num_results
+        def _env_proxy() -> Optional[str]:
+            https_proxy = (
+                os.environ.get('HTTPS_PROXY') or
+                os.environ.get('https_proxy')
             )
-
-            logger.info(
-                f"DuckDuckGo search successful for query: {query}"
+            http_proxy = (
+                os.environ.get('HTTP_PROXY') or
+                os.environ.get('http_proxy')
             )
+            for p in (https_proxy, http_proxy):
+                if p and (
+                    p.startswith('http://') or
+                    p.startswith('https://')
+                ):
+                    return p
+            return None
 
-            results = []
-            for item in raw_results:
+        def _new_ddgs_with_proxy(proxy_url: str) -> Optional[DDGS]:
+            try:
+                sig = inspect.signature(DDGS)
+                params = sig.parameters
+                if 'proxies' in params:
+                    return DDGS(proxies={
+                        'http': proxy_url,
+                        'https': proxy_url
+                    })
+                if 'proxy' in params:
+                    return DDGS(proxy=proxy_url)
+            except Exception:
+                pass
+            return None
+
+        def _collect(raw_results_iter) -> List[SearchResult]:
+            results: List[SearchResult] = []
+            for item in raw_results_iter:
                 results.append(SearchResult(
                     title=item.get('title', ''),
                     link=item.get('href', ''),
                     snippet=item.get('body', ''),
                     source='duckduckgo'
                 ))
-
             return results
 
+        # 1) direct attempt
+        try:
+            raw_results = self.ddgs.text(
+                query,
+                region="wt-wt",
+                safesearch="moderate",
+                max_results=num_results
+            )
+            results = _collect(raw_results)
+            if results:
+                logger.info(
+                    f"DuckDuckGo search successful for query: {query}"
+                )
+                return results
         except Exception as e:
-            logger.error(f"DuckDuckGo search failed: {str(e)}")
-            return []
+            logger.warning(
+                "DuckDuckGo direct search failed: %s", str(e)
+            )
+
+        # 2) retry via configured proxy
+        proxy_to_use = self.proxy or _env_proxy()
+        if proxy_to_use:
+            try:
+                ddgs_proxy = _new_ddgs_with_proxy(proxy_to_use)
+                if ddgs_proxy is not None:
+                    raw_results = ddgs_proxy.text(
+                        query,
+                        region="wt-wt",
+                        safesearch="moderate",
+                        max_results=num_results
+                    )
+                    results = _collect(raw_results)
+                    if results:
+                        logger.info(
+                            "DuckDuckGo search via proxy successful for "
+                            "query: %s", query
+                        )
+                        return results
+            except Exception as e:
+                logger.error(
+                    "DuckDuckGo search via proxy failed: %s", str(e)
+                )
+
+        # 3) give up
+        logger.warning("DuckDuckGo returned no results for query: %s", query)
+        return []
 
 
 class GoogleSearch(SearchEngine):
@@ -500,10 +559,6 @@ class SearchManager:
             logger.info("Performance monitoring enabled")
 
     def _initialize_engines(self):
-        # 总是添加DuckDuckGo作为默认回退引擎
-        duckduckgo = DuckDuckGoSearch()
-        self.fallback_engines.append(duckduckgo)
-        
         # 如果配置文件存在,尝试添加其他搜索引擎
         config_path = os.path.join(
             os.path.dirname(__file__), '..', 'config.json'
@@ -591,10 +646,27 @@ class SearchManager:
                     f"Failed to load search configuration: {e}"
                 )
         
-        # 如果没有配置任何引擎，确保至少有 DuckDuckGo
+        # Always ensure DuckDuckGo is available as fallback
+        ddg_proxy = None
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config2 = json.load(f)
+                ddg_proxy = (
+                    _extract_proxy(config2.get('duckduckgo', {})) or
+                    proxy_from_config
+                )
+        except Exception:
+            ddg_proxy = proxy_from_config
+
+        duckduckgo = DuckDuckGoSearch(proxy=ddg_proxy)
+        # Put DuckDuckGo as lowest-priority fallback engine
+        self.fallback_engines.append(duckduckgo)
         if not self.engines:
             self.engines.append(duckduckgo)
-            logger.info("No engines configured, using DuckDuckGo as default")
+            logger.info(
+                "No engines configured, using DuckDuckGo as default"
+            )
 
     # Note: We don't inject env proxy here to preserve direct-first policy.
     # Engines will try direct and only use configured proxy (from config.json)

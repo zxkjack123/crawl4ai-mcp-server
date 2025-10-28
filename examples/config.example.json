@@ -18,5 +18,8 @@
         "base_url": "http://localhost:8080",
         "language": "zh-CN",
         "proxy": "http://127.0.0.1:7890"
+    },
+    "duckduckgo": {
+        "proxy": "http://127.0.0.1:7890"
     }
 }

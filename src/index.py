@@ -7,12 +7,10 @@ import psutil
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import FastMCP
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
 from crawl4ai import CacheMode
-from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 # Use relative import or direct import depending on context
@@ -27,27 +25,24 @@ crawler = None
 search_manager = None
 start_time = time.time()  # 记录服务启动时间
 
+
 async def initialize_search_manager():
     global search_manager
     if search_manager is None:
         search_manager = SearchManager()
-        print("Search manager initialized with engines:", [type(e).__name__ for e in search_manager.engines])
+    print(
+        "Search manager initialized with engines:",
+        [type(e).__name__ for e in search_manager.engines]
+    )
+
 
 async def initialize_crawler():
     global crawler
     browser_config = BrowserConfig(headless=True)
-    md_generator = DefaultMarkdownGenerator(
-        options={"citations": True}
-    )
-
-    config = CrawlerRunConfig(
-        cache_mode=CacheMode.BYPASS,
-        word_count_threshold=10,
-        excluded_tags=["nav", "footer", "header"],
-        markdown_generator=md_generator
-    )
+    # md_generator can be configured at call site via run_config
     crawler = AsyncWebCrawler(config=browser_config)
     await crawler.__aenter__()
+
 
 async def close_crawler():
     global crawler
@@ -203,7 +198,7 @@ async def system_status(check_type: str = "health") -> str:
             
             health_data = {
                 "status": "healthy",
-                "version": "0.5.3",
+                "version": "0.5.7",
                 "uptime_seconds": round(uptime_seconds, 2),
                 "uptime_hours": round(uptime_hours, 2),
                 "components": {
@@ -276,7 +271,7 @@ async def system_status(check_type: str = "health") -> str:
             metrics_data = {
                 "service": {
                     "uptime_seconds": round(uptime_seconds, 2),
-                    "version": "0.5.3"
+                    "version": "0.5.7"
                 },
                 "system": {
                     "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -518,7 +513,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.5.3"
+                "version": "0.5.7"
             }
         
         # 确保输出目录存在

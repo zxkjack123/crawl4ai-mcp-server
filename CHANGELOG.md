@@ -232,6 +232,16 @@ This ensures compatibility with:
 [0.3.0]: https://github.com/zxkjack123/crawl4ai-mcp-server/releases/tag/v0.3.0
 
 ## [0.5.6] - 2025-10-15
+## [0.5.7] - 2025-10-28
+
+### Changed
+- Code cleanup: remove unused imports and variables in `src/index.py` and `src/search.py`.
+- Improve DuckDuckGo engine with optional proxy support and direct-first behavior.
+- Align version strings across system status and export metadata.
+
+### Tested
+- Full test suite passing (66 tests).
+
 
 ### Added
 - Config.json-driven proxy support with precedence: per-engine > global > env.
