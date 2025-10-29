@@ -59,3 +59,10 @@ output/
 htmlcov/
 coverage.xml
 *.cover
+
+# Local development/benchmark scripts (keep untracked)
+dev_check_search.py
+perf_benchmark_topic.py
+# Generic patterns for ad-hoc dev scripts
+dev_*.py
+perf_*.py
