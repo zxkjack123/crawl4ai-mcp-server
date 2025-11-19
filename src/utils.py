@@ -8,9 +8,11 @@
 """
 
 import asyncio
-import time
 import logging
+import os
+import time
 from typing import List, Dict, Any, Callable, Optional
+from urllib.parse import urlsplit, urlunsplit
 from functools import wraps
 from dataclasses import dataclass
 
@@ -324,6 +326,116 @@ class RateLimiter:
                 (1 - self.tokens / self.config.max_requests) * 100, 2
             ),
         }
+
+
+def rewrite_local_proxy_url(proxy_url: Optional[str]) -> Optional[str]:
+    """Rewrite localhost proxies to a host gateway when requested.
+
+    When running inside the Dockerized HTTP bridge, users often keep their
+    proxy (e.g., Clash) bound to the host loopback address. Accessing that
+    proxy from inside the container requires reaching the host gateway, not
+    127.0.0.1 inside the container. When the environment variable
+    CRAWL4AI_ALLOW_PROXY_REWRITE is set ("1", "true", "yes"), this helper
+    rewrites any proxy URL pointing to localhost/127.0.0.1 to use the
+    configured gateway host and optional port override.
+    """
+
+    if not proxy_url:
+        return proxy_url
+
+    allow = os.environ.get("CRAWL4AI_ALLOW_PROXY_REWRITE", "0").lower()
+    if allow not in {"1", "true", "yes"}:
+        return proxy_url
+
+    try:
+        parsed = urlsplit(proxy_url)
+    except Exception:
+        return proxy_url
+
+    hostname = parsed.hostname
+    if hostname not in {"127.0.0.1", "localhost"}:
+        return proxy_url
+
+    gateway_host = (
+        os.environ.get("HOST_PROXY_GATEWAY") or
+        os.environ.get("HOST_DOCKER_GATEWAY") or
+        os.environ.get("HOST_GATEWAY_FALLBACK") or
+        "host.docker.internal"
+    )
+
+    if not gateway_host:
+        return proxy_url
+
+    # Allow overriding the port when the host proxy listens on a
+    # non-standard port (e.g., Clash defaults to 7890/7891/7892 or a custom port)
+    port_override_raw = os.environ.get("HOST_PROXY_PORT_OVERRIDE")
+
+    # urllib.parse.urlsplit raises ValueError when accessing .port if the
+    # original URL used an out-of-range value (e.g., 78900). Guard the access so
+    # we can still rewrite the hostname and optionally apply a valid override.
+    port: Optional[int] = None
+    try:
+        port = parsed.port  # may be None if no port in URL
+    except ValueError:
+        hostinfo = parsed.netloc
+        if hostinfo and "@" in hostinfo:
+            hostinfo = hostinfo.split("@", 1)[1]
+        candidate = hostinfo.rsplit(":", 1)[-1] if hostinfo and ":" in hostinfo else None
+        if candidate and candidate.isdigit():
+            candidate_int = int(candidate)
+            if 0 < candidate_int < 65536:
+                port = candidate_int
+            else:
+                logger.warning(
+                    "rewrite_local_proxy_url: ignoring out-of-range port %s from %s",
+                    candidate,
+                    proxy_url,
+                )
+        elif candidate:
+            logger.warning(
+                "rewrite_local_proxy_url: unable to parse port '%s' from %s",
+                candidate,
+                proxy_url,
+            )
+
+    # Apply override if provided and valid
+    if port_override_raw:
+        candidate = port_override_raw.strip()
+        try:
+            port_candidate = int(candidate)
+            if 0 < port_candidate < 65536:
+                port = port_candidate
+            else:
+                logger.warning(
+                    "HOST_PROXY_PORT_OVERRIDE=%s is out of range (1-65535); ignoring",
+                    candidate,
+                )
+        except ValueError:
+            logger.warning(
+                "HOST_PROXY_PORT_OVERRIDE=%s is not a valid integer; ignoring",
+                candidate,
+            )
+
+    # Preserve authentication info if present
+    netloc_host = gateway_host
+    if port:
+        netloc_host = f"{netloc_host}:{port}"
+
+    if parsed.username:
+        auth = parsed.username
+        if parsed.password:
+            auth += f":{parsed.password}"
+        netloc_host = f"{auth}@{netloc_host}"
+
+    rewritten = urlunsplit((
+        parsed.scheme,
+        netloc_host,
+        parsed.path,
+        parsed.query,
+        parsed.fragment
+    ))
+
+    return rewritten
 
 
 class MultiRateLimiter:

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.5.9] - 2025-11-19
+
+### Added
+- 📡 Finalized the FastAPI HTTP bridge (`src/rest_server.py`) with dedicated smoke and integration tests, so external services can rely on `/health`, `/search`, and `/read_url` just like MCP tools.
+
+### Changed
+- 🔧 Default SearXNG host binding now uses port `28981` (instead of `8080`) to avoid conflicts with services like Dify; all docs, examples, and config defaults were updated accordingly.
+- 🐳 Makefile + Docker Compose workflows now document the bridged ports (`18080/28981`) and inherit `.env` proxy/API settings for zero-config deployments.
+- 📝 README release highlights bumped to v0.5.9, emphasizing the new HTTP workflow and SearXNG port guidance.
+
+### Tested
+- ✅ `.venv/bin/pytest` — 77 tests passed in 1567s on Linux (Python 3.12.3).
+
 ## [0.5.5] - 2025-10-12
 
 ### Tested
@@ -232,6 +247,25 @@ This ensures compatibility with:
 [0.3.0]: https://github.com/zxkjack123/crawl4ai-mcp-server/releases/tag/v0.3.0
 
 ## [0.5.6] - 2025-10-15
+## [0.5.8] - 2025-11-18
+
+### Added
+- Highlighted the 0.5.8 release in `README.md`, including Docker `SERVER_MODE=http_bridge` guidance and Makefile-driven workflows for the HTTP bridge + SearXNG stack.
+
+### Changed
+- Expanded `docs/SEARXNG_INTEGRATION.md` with proxy-entrypoint context, automated rewrite explanations, and `make` helpers to simplify local spin-ups.
+- Refreshed bundled export samples under `output/` so their metadata matches the 0.5.8 release and new proxy guidance.
+- Updated the SearXNG user-agent string to `Crawl4AI-HTTP-Bridge/0.5.8` for clearer telemetry.
+
+### Fixed
+- `_extract_proxy_from_cfg` now normalizes dicts/strings before rewrites, ensuring host proxy values load correctly from `config.json`.
+
+### Maintenance
+- Synchronized every version string (code, metadata, pyproject, docs) to 0.5.8 for a clean release cut.
+
+### Tested
+- ✅ `.venv/bin/pytest` — 77 tests passed in 1458s on Linux (Python 3.12.3).
+
 ## [0.5.7] - 2025-10-29
 
 ### Added

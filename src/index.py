@@ -16,8 +16,10 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 # Use relative import or direct import depending on context
 try:
     from .search import SearchManager
+    from .utils import rewrite_local_proxy_url
 except ImportError:
     from search import SearchManager
+    from utils import rewrite_local_proxy_url
 
 mcp = FastMCP("Crawl4AI")
 
@@ -55,13 +57,20 @@ def _extract_proxy_from_cfg(cfg: dict) -> str | None:
     proxy_cfg = cfg.get("proxy")
     if not proxy_cfg:
         return None
+
     if isinstance(proxy_cfg, str):
-        return proxy_cfg
-    if isinstance(proxy_cfg, dict):
+        proxy_value = proxy_cfg
+    elif isinstance(proxy_cfg, dict):
         https_p = proxy_cfg.get("https")
         http_p = proxy_cfg.get("http")
-        return https_p or http_p
-    return None
+        proxy_value = https_p or http_p
+    else:
+        proxy_value = None
+
+    if not proxy_value:
+        return None
+
+    return rewrite_local_proxy_url(proxy_value)
 
 
 def _env_proxy_http_https() -> str | None:
@@ -72,7 +81,7 @@ def _env_proxy_http_https() -> str | None:
     http_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
     for p in (https_proxy, http_proxy):
         if p and (p.startswith("http://") or p.startswith("https://")):
-            return p
+            return rewrite_local_proxy_url(p)
     return None
 
 
@@ -329,7 +338,7 @@ async def system_status(check_type: str = "health") -> str:
             
             health_data = {
                 "status": "healthy",
-                "version": "0.5.7",
+                "version": "0.5.9",
                 "uptime_seconds": round(uptime_seconds, 2),
                 "uptime_hours": round(uptime_hours, 2),
                 "components": {
@@ -404,7 +413,7 @@ async def system_status(check_type: str = "health") -> str:
             metrics_data = {
                 "service": {
                     "uptime_seconds": round(uptime_seconds, 2),
-                    "version": "0.5.7"
+                    "version": "0.5.9"
                 },
                 "system": {
                     "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -642,7 +651,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.5.7"
+                "version": "0.5.9"
             }
         
         # 确保输出目录存在

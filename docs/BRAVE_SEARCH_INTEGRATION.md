@@ -83,7 +83,7 @@ results = await search_manager.search("Python programming", engine="auto")
         "cse_id": "YOUR_CSE_ID"
     },
     "searxng": {
-        "base_url": "http://localhost:8080",
+        "base_url": "http://localhost:28981",
         "language": "zh-CN"
     }
 }

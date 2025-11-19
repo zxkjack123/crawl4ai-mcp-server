@@ -3,18 +3,21 @@
 SearXNG 搜索引擎测试脚本
 
 测试 SearXNG 搜索功能是否正常工作。
-确保 SearXNG 已经启动: docker run -d -p 8080:8080 searxng/searxng
+建议使用 `docker compose -f docker/docker-compose.yml up -d searxng`
+启动本地实例（已包含 format=json + GET 配置）。
 """
 
 import asyncio
 import json
-import sys
 import os
+import sys
 
-# 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.search import SearchManager
+# 添加项目根目录到路径, 便于单独运行脚本
+try:
+    from src.search import SearchManager
+except ImportError:  # pragma: no cover - fallback when executed directly
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.search import SearchManager
 
 
 async def test_searxng_search():
@@ -36,7 +39,7 @@ async def test_searxng_search():
         # 创建默认配置
         default_config = {
             "searxng": {
-                "base_url": "http://localhost:8080",
+                "base_url": "http://localhost:28981",
                 "language": "zh-CN"
             }
         }
@@ -113,10 +116,11 @@ async def test_searxng_search():
         print("故障排除:")
         print("  1. 确保 SearXNG 正在运行:")
         print("     docker ps | grep searxng")
-        print("  2. 启动 SearXNG:")
-        print("     docker run -d -p 8080:8080 --name searxng searxng/searxng")
+        print("  2. 启动 SearXNG (推荐使用仓库内 docker-compose):")
+        print("     docker compose -f docker/docker-compose.yml up -d searxng")
+        print("     # 或手动运行镜像, 但务必挂载 docker/searxng/settings.yml 以允许 format=json")
         print("  3. 测试 SearXNG API:")
-        print("     curl http://localhost:8080/search?q=test&format=json")
+        print("     curl http://localhost:28981/search?q=test&format=json")
         return
     
     print("=" * 60)

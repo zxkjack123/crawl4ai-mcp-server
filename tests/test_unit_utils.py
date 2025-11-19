@@ -14,7 +14,8 @@ from src.utils import (
     async_retry,
     RateLimiter,
     RateLimitConfig,
-    MultiRateLimiter
+    MultiRateLimiter,
+    rewrite_local_proxy_url,
 )
 
 
@@ -322,6 +323,35 @@ class TestEdgeCases:
         
         merged = merge_and_deduplicate(all_results, num_results=10)
         assert len(merged) == 1
+
+
+class TestProxyRewrite:
+    """测试代理 URL 重写逻辑"""
+
+    def test_rewrite_handles_invalid_port_with_override(self, monkeypatch):
+        monkeypatch.setenv("CRAWL4AI_ALLOW_PROXY_REWRITE", "true")
+        monkeypatch.setenv("HOST_PROXY_GATEWAY", "host.docker.internal")
+        monkeypatch.setenv("HOST_PROXY_PORT_OVERRIDE", "7891")
+
+        rewritten = rewrite_local_proxy_url("http://127.0.0.1:78900")
+
+        assert rewritten == "http://host.docker.internal:7891"
+
+    def test_rewrite_drops_invalid_port_without_override(self, monkeypatch):
+        monkeypatch.setenv("CRAWL4AI_ALLOW_PROXY_REWRITE", "true")
+        monkeypatch.setenv("HOST_PROXY_GATEWAY", "gateway.test")
+        monkeypatch.delenv("HOST_PROXY_PORT_OVERRIDE", raising=False)
+
+        rewritten = rewrite_local_proxy_url("http://localhost:99999")
+
+        assert rewritten == "http://gateway.test"
+
+    def test_non_localhost_proxy_stays_unchanged(self, monkeypatch):
+        monkeypatch.setenv("CRAWL4AI_ALLOW_PROXY_REWRITE", "true")
+        monkeypatch.setenv("HOST_PROXY_GATEWAY", "gateway.test")
+
+        original = "http://10.0.0.1:8080"
+        assert rewrite_local_proxy_url(original) == original
 
 
 if __name__ == "__main__":

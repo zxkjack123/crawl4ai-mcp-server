@@ -148,7 +148,7 @@ source .venv/bin/activate
 
   "searxng": {python tests/test_google_api_direct.py
 
-    "base_url": "http://localhost:8080",
+    "base_url": "http://localhost:28981",
 
     "language": "zh-CN"# 测试双引擎
 
@@ -166,7 +166,7 @@ source .venv/bin/activate
 
 - **base_url**: SearXNG 实例的地址- `docs/API_KEY_ERROR_GUIDE.md` - API Key 错误诊断
 
-  - 本地部署: `http://localhost:8080`- `docs/GOOGLE_API_ENABLE_GUIDE.md` - API 启用问题
+  - 本地部署: `http://localhost:28981`- `docs/GOOGLE_API_ENABLE_GUIDE.md` - API 启用问题
 
   - 远程实例: `https://searx.example.com`- `docs/TEST_RESULTS.md` - 测试结果参考
 
@@ -188,10 +188,10 @@ source .venv/bin/activate
 **方式 1: Docker 一键部署**
 ```bash
 # 启动 SearXNG 实例
-docker run -d -p 8080:8080 --name searxng searxng/searxng
+docker run -d -p 28981:8080 --name searxng searxng/searxng
 
 # 验证运行状态
-curl http://localhost:8080/search?q=test&format=json
+curl http://localhost:28981/search?q=test&format=json
 ```
 
 **方式 2: Docker Compose 部署**
@@ -203,11 +203,11 @@ services:
     image: searxng/searxng:latest
     container_name: searxng
     ports:
-      - "8080:8080"
+      - "28981:8080"
     volumes:
       - ./searxng:/etc/searxng:rw
     environment:
-      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_BASE_URL=http://localhost:28981/
     restart: unless-stopped
 ```
 
@@ -247,7 +247,7 @@ docker-compose logs -f searxng
     "cse_id": "e7250f42e66574df7"
   },
   "searxng": {
-    "base_url": "http://localhost:8080",
+    "base_url": "http://localhost:28981",
     "language": "zh-CN"
   }
 }
@@ -317,7 +317,7 @@ python tests/test_searxng.py
 
 **问题**: 连接失败 `Connection refused`
 - **原因**: SearXNG 未运行
-- **解决**: `docker run -d -p 8080:8080 searxng/searxng`
+- **解决**: `docker run -d -p 28981:8080 searxng/searxng`
 
 **问题**: 搜索结果为空
 - **原因**: 语言设置不匹配
@@ -345,7 +345,7 @@ python tests/test_searxng.py
 ```json
 {
   "searxng": {
-    "base_url": "http://localhost:8080",
+    "base_url": "http://localhost:28981",
     "language": "zh-CN"
   }
 }

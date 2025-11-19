@@ -8,6 +8,11 @@
 
 ## 特性
 
+### 🚀 v0.5.9 新亮点
+- 🌐 **HTTP Bridge 定稿** - `src/rest_server.py` + `tests/test_rest_server*.py` 组成完整的 REST 层，第三方服务可直接通过 `/health`、`/search`、`/read_url` 复用搜索/爬取能力。
+- 🐳 **Compose + Makefile 一键联动** - `make docker-up` 会自动启动 HTTP Bridge 与 SearXNG，映射到宿主机 `18080/28981`，并继承 `.env` 中的 API Key、代理和缓存配置。
+- 🔁 **SearXNG 独立端口 28981** - Docker Compose、`.env.example`、`examples/CONFIG.md`、`docs/SEARXNG_INTEGRATION.md` 等文件全部切换到 28981，避免与常见服务 (Dify 等) 冲突，并在文档中补充了排查步骤。
+
 ### 🎉 v0.5.0 新功能
 - 💾 **缓存持久化** - SQLite持久化存储，双层缓存架构(内存+数据库)，75%性能提升
 - 🔄 **跨会话缓存** - 重启后数据不丢失，支持导出/导入/预热
@@ -142,6 +147,8 @@ notepad config.json
   - 📖 [SearXNG 集成指南](docs/SEARXNG_INTEGRATION.md) - 部署和配置教程
 
 更多配置详情，请参考 📖 [配置说明](examples/CONFIG.md)。
+
+> 💡 **无需在 config.json 中硬编码密钥**: 只需将 `BRAVE_API_KEY`、`GOOGLE_API_KEY`、`GOOGLE_CSE_ID` 等写入 `.env`，无论本地运行还是 Docker 容器都会自动读取这些环境变量。`make docker-up` 会自动加载根目录下的 `.env` 文件。
 
 ### 🧪 测试
 
@@ -281,11 +288,13 @@ run_tests.bat    # CMD
         "cse_id": "your-cse-id"
     },
     "searxng": {
-        "base_url": "http://localhost:8080",
+        "base_url": "http://localhost:28981",
         "language": "zh-CN"
     }
 }
 ```
+
+    > 💡 推荐使用 `docker/searxng/settings.yml` + `docker/docker-compose.yml` 一键启动本地 SearXNG, HTTP Bridge 会通过 `http://searxng:8080` 自动访问该服务。若你仍在宿主机单独运行 SearXNG, 则继续在 `.env` 中设置 `SEARXNG_BASE_URL=http://host.docker.internal:28981`（Linux 需 `extra_hosts: host.docker.internal:host-gateway`）以确保容器可访问该实例。需要修改代理出口时，可直接编辑 `docker/searxng/settings.yml` 中的 `outgoing.proxies`。
 
 缓存配置（在代码中）:
 ```python
@@ -328,6 +337,163 @@ manager.import_cache("cache_backup.json")
 }
 ```
 
+## HTTP 服务桥接
+
+如果希望在其他项目中通过 HTTP 而非 MCP 协议调用这些能力,可以启用内置的 FastAPI 网关 `src/rest_server.py`。它会在启动时复用同一套配置/缓存,因此无需额外改动即可被任意语言或框架调用。
+
+> 💡 Docker 镜像默认设置 `SERVER_MODE=http` 并通过 `docker/entrypoint.sh` 自动运行 `uvicorn src.rest_server:app`。如需改回传统 MCP 运行模式,只需在 `.env` 或 compose 文件中设置 `SERVER_MODE=mcp`。
+
+### 启动方式
+
+先确保常规依赖已安装,然后运行:
+
+```bash
+uvicorn src.rest_server:app --host 0.0.0.0 --port 8000
+```
+
+默认会监听 `http://localhost:8000`, 你也可以调整主机/端口。服务启动后会预热搜索管理器以降低首个请求延迟。
+
+### 可用端点
+
+| 方法 | 路径        | 说明                   |
+| ---- | ----------- | ---------------------- |
+| GET  | `/health`   | 返回健康/就绪状态      |
+| POST | `/search`   | 触发多引擎搜索         |
+| POST | `/read_url` | 抓取网页并输出指定格式 |
+
+所有端点的请求/响应结构与 MCP 工具保持一致,错误会以 `HTTP 400` 返回。
+
+### 示例调用
+
+```bash
+# 触发一次搜索
+curl -X POST http://localhost:8000/search \
+    -H "Content-Type: application/json" \
+    -d '{"query": "latest ai papers", "num_results": 5, "engine": "auto"}'
+
+# 抓取网页内容
+curl -X POST http://localhost:8000/read_url \
+    -H "Content-Type: application/json" \
+    -d '{"url": "https://example.com", "format": "markdown_with_citations"}'
+```
+
+这样便可在任意支持 HTTP 的环境中复用 Crawl4AI 的搜索与内容提取能力,无需直接集成 MCP。
+
+快速容器化体验:
+
+```bash
+make docker-build
+make docker-up
+make docker-health
+```
+
+上述命令会自动加载 `.env`、拉起内置 SearXNG + HTTP Bridge,运行完成后即可在 `http://localhost:18080` 访问 `/health`、`/search`、`/read_url`。
+
+### 🐳 Docker 常驻服务
+
+若需要长期对外暴露 HTTP 能力,推荐使用容器方式运行:
+
+1. 准备环境变量 (API Key、代理、Clash 设置等)。复制示例文件并填写:
+    ```bash
+    cp .env.example .env
+    nano .env  # BRAVE_API_KEY=xxx, GOOGLE_API_KEY=xxx, GOOGLE_CSE_ID=xxx
+               # CRAWL4AI_HTTP_PROXY=http://host.docker.internal:7890
+               # CRAWL4AI_HTTPS_PROXY=http://host.docker.internal:7890
+               # CRAWL4AI_ALLOW_PROXY_REWRITE=true
+               # HOST_PROXY_PORT_OVERRIDE=7890  (Clash 默认 7890/7891, 端口需在 1-65535)
+    ```
+    `make` 会自动把 `.env` 注入到 `docker compose`，这样镜像内就自带密钥，调用方无需再额外配置。
+2. (可选) 如果还需要自定义其他搜索引擎或缓存策略，可以照旧挂载 `config.json`:
+    ```bash
+    cp examples/config.example.json config.json
+    ```
+    没有 `config.json` 也能运行，容器会直接使用 `.env` 中的密钥和代理。
+3. 在项目根目录执行 Makefile 目标即可构建/运行(自动加载 `.env`):
+    ```bash
+    make docker-build
+    make docker-up
+    make docker-health
+    ```
+    默认会将容器内 `8080` 端口映射到宿主机 `18080`，可在 `docker/docker-compose.yml` 的 `ports` 中调整。
+4. 需要停止或重新部署时:
+    ```bash
+    make docker-down
+    make docker-restart  # 等同于 down + up
+    ```
+
+> ⚠️ `ERR_PROXY_CONNECTION_FAILED`：容器内的 127.0.0.1 指向自身而不是宿主机。若代理(如 Clash)已开启 LAN 并监听 `0.0.0.0:7890`，推荐直接把 `.env` 中的 `CRAWL4AI_HTTP_PROXY/HTTPS_PROXY` 设为 `http://host.docker.internal:7890`。若仍绑定在宿主机 `127.0.0.1`, 同时设置 `CRAWL4AI_ALLOW_PROXY_REWRITE=true`、`HOST_PROXY_PORT_OVERRIDE=7890`(或你的真实端口, 必须在 1-65535)，容器会自动把所有 `http://127.0.0.1:*` 重写为 `host.docker.internal:<端口>`。
+
+快速连通性自检:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml exec crawl4ai-http \
+    curl -x http://host.docker.internal:7890 -I https://www.google.com
+```
+
+看到 `HTTP/2 200` 即表示容器已经可以通过 Clash 出网。
+
+容器默认使用 `SERVER_MODE=http` 运行 FastAPI, 并通过 `HTTP_PORT` 控制端口(默认 8080)。若需要在容器中运行传统 MCP 服务,可启动时设置 `SERVER_MODE=mcp` 即可。
+
+### 🤝 在其他程序中调用 Docker 服务
+
+当容器启动并健康 (见上方 `curl` 检查) 后, 任意支持 HTTP 的语言/框架都可以通过以下端点复用搜索与网页提取能力:
+
+| 方法 | 路径        | 描述                           |
+| ---- | ----------- | ------------------------------ |
+| GET  | `/health`   | 服务状态+指标,可用于探活/监控  |
+| POST | `/search`   | 执行多引擎搜索,结构同 MCP 工具 |
+| POST | `/read_url` | 抓取网页并输出指定格式         |
+
+所有请求/返回都使用 JSON,字段与 MCP 工具完全一致。示例:
+
+```bash
+# 发起搜索
+curl -X POST http://localhost:18080/search \
+    -H "Content-Type: application/json" \
+    -d '{"query":"latest ai papers","num_results":5,"engine":"auto"}'
+
+# 抓取网页内容
+curl -X POST http://localhost:18080/read_url \
+    -H "Content-Type: application/json" \
+    -d '{"url":"https://example.com","format":"markdown_with_citations"}'
+```
+
+主机语言示例:
+
+```python
+import requests
+
+BASE = "http://localhost:18080"
+payload = {"query": "rust memory model", "num_results": 3, "engine": "auto"}
+resp = requests.post(f"{BASE}/search", json=payload, timeout=30)
+resp.raise_for_status()
+print(resp.json())
+```
+
+```javascript
+const fetch = require("node-fetch");
+
+async function run() {
+    const res = await fetch("http://localhost:18080/read_url", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({url: "https://example.com", format: "fit_markdown"})
+    });
+    if (!res.ok) throw new Error(await res.text());
+    console.log(await res.json());
+}
+
+run();
+```
+
+接入提醒:
+
+- **同配置/缓存**: Compose 会把宿主机 `config.json`、缓存与日志目录挂载进容器,因此 API Key、缓存策略等与 MCP 模式一致。
+- **超时与重试**: 远程搜索可能耗时数秒,建议在客户端设置合适的超时和重试策略。
+- **健康探测**: 在流量入口处定期探测 `/health`,可结合 `make docker-health` 做本地巡检。
+- **安全/公开部署**: 需对外暴露时请配合反向代理(如 Nginx/Traefik)、VPN 或鉴权机制; 默认镜像不会自带认证。
+- **宿主机代理**: 若 Clash 已开启 LAN, 直接把 `.env` 中的 `CRAWL4AI_HTTP_PROXY/HTTPS_PROXY` 指向 `http://host.docker.internal:<端口>` 即可; 若仍绑定 `127.0.0.1`, 结合 `CRAWL4AI_ALLOW_PROXY_REWRITE=true` + `HOST_PROXY_PORT_OVERRIDE=<端口>` 让容器自动重写。
+
 ## LLM内容优化
 
 服务器采用了一系列针对LLM的内容优化策略:
@@ -346,7 +512,7 @@ crawl4ai_mcp_server/
 ├── src/
 │   ├── index.py      # 服务器主实现
 │   └── search.py     # 搜索功能实现
-├── config_demo.json  # 配置文件示例
+├── examples/config.example.json  # 配置文件示例
 ├── pyproject.toml    # 项目配置
 ├── requirements.txt  # 依赖列表
 └── README.md        # 项目文档
@@ -356,7 +522,7 @@ crawl4ai_mcp_server/
 
 1. 复制配置示例文件:
 ```bash
-cp config_demo.json config.json
+cp examples/config.example.json config.json
 ```
 
 2. 如需使用Google搜索,在config.json中配置API密钥:

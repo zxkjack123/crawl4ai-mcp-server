@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import inspect
 import asyncio
 import httpx
@@ -18,7 +18,8 @@ try:
     from .cache import SearchCache
     from .utils import (
         async_retry, MultiRateLimiter,
-        merge_and_deduplicate
+        merge_and_deduplicate,
+        rewrite_local_proxy_url
     )
     from .monitor import (
         SearchMetrics, get_monitor
@@ -27,7 +28,8 @@ except ImportError:
     from cache import SearchCache
     from utils import (
         async_retry, MultiRateLimiter,
-        merge_and_deduplicate
+        merge_and_deduplicate,
+        rewrite_local_proxy_url
     )
     from monitor import (
         SearchMetrics, get_monitor
@@ -84,7 +86,7 @@ class DuckDuckGoSearch(SearchEngine):
                     p.startswith('http://') or
                     p.startswith('https://')
                 ):
-                    return p
+                    return rewrite_local_proxy_url(p)
             return None
 
         def _new_ddgs_with_proxy(proxy_url: str) -> Optional[DDGS]:
@@ -204,7 +206,7 @@ class GoogleSearch(SearchEngine):
             )
             for p in (https_proxy, http_proxy):
                 if p and (p.startswith('http://') or p.startswith('https://')):
-                    return p
+                    return rewrite_local_proxy_url(p)
             return None
 
         try:
@@ -331,7 +333,7 @@ class BraveSearch(SearchEngine):
                         p.startswith('http://') or
                         p.startswith('https://')
                     ):
-                        return p
+                        return rewrite_local_proxy_url(p)
                 return None
 
             logger.info(f"Sending request to Brave Search (direct): {query}")
@@ -396,7 +398,7 @@ class BraveSearch(SearchEngine):
 class SearXNGSearch(SearchEngine):
     def __init__(
         self,
-        base_url: str = "http://localhost:8080",
+        base_url: str = "http://localhost:28981",
         language: str = "zh-CN",
         proxy: Optional[str] = None
     ):
@@ -405,7 +407,7 @@ class SearXNGSearch(SearchEngine):
 
         Args:
             base_url: SearXNG 实例的基础 URL
-                (例如: http://localhost:8080 或
+                (例如: http://localhost:28981 或
                 https://searx.example.com)
             language: 搜索语言，默认为 zh-CN (中文)
         """
@@ -427,11 +429,11 @@ class SearXNGSearch(SearchEngine):
             搜索结果列表
         """
         try:
-            params = {
+            params: Dict[str, str] = {
                 'q': query,
                 'format': 'json',
                 'language': self.language,
-                'pageno': 1
+                'pageno': '1'
             }
 
             search_url = f"{self.base_url}/search"
@@ -441,11 +443,26 @@ class SearXNGSearch(SearchEngine):
                 query
             )
 
+            trusted_ip = os.environ.get('SEARXNG_TRUSTED_IP', '127.0.0.1')
+            default_headers = {
+                'User-Agent': os.environ.get(
+                    'SEARXNG_USER_AGENT',
+                    'Crawl4AI-HTTP-Bridge/0.5.9'
+                ),
+                'Accept': 'application/json',
+                'X-Forwarded-For': trusted_ip,
+                'X-Real-IP': trusted_ip,
+            }
+
             async def _do_request(proxy_url: Optional[str]):
                 async with httpx.AsyncClient(
                     timeout=30.0, proxy=proxy_url, trust_env=False
                 ) as client:
-                    return await client.get(search_url, params=params)
+                    return await client.get(
+                        search_url,
+                        params=params,
+                        headers=default_headers
+                    )
 
             def _env_proxy() -> Optional[str]:
                 https_proxy = (
@@ -461,7 +478,7 @@ class SearXNGSearch(SearchEngine):
                         p.startswith('http://') or
                         p.startswith('https://')
                     ):
-                        return p
+                        return rewrite_local_proxy_url(p)
                 return None
 
             try:
@@ -509,7 +526,7 @@ class SearXNGSearch(SearchEngine):
             logger.error(f"SearXNG HTTP error: {str(e)}")
             logger.warning(
                 "如果 SearXNG 未运行，请使用 "
-                "'docker run -d -p 8080:8080 searxng/searxng' 启动"
+                "'docker run -d -p 28981:8080 searxng/searxng' 启动"
             )
             return []
         except Exception as e:
@@ -559,105 +576,120 @@ class SearchManager:
             logger.info("Performance monitoring enabled")
 
     def _initialize_engines(self):
-        # 如果配置文件存在,尝试添加其他搜索引擎
         config_path = os.path.join(
             os.path.dirname(__file__), '..', 'config.json'
         )
+        config: Dict[str, Any] = {}
         proxy_from_config: Optional[str] = None
-        # Helper: pick proxy from config (string or {https,http})
-        
+
         def _extract_proxy(cfg: Dict) -> Optional[str]:
             proxy_cfg = cfg.get('proxy')
             if not proxy_cfg:
                 return None
             if isinstance(proxy_cfg, str):
-                return proxy_cfg
+                return rewrite_local_proxy_url(proxy_cfg)
             if isinstance(proxy_cfg, dict):
-                # prefer https then http
                 https_p = proxy_cfg.get('https')
                 http_p = proxy_cfg.get('http')
-                return https_p or http_p
+                return rewrite_local_proxy_url(https_p or http_p)
             return None
+
+        def _env_proxy_var(var_name: str) -> Optional[str]:
+            value = os.environ.get(var_name)
+            return rewrite_local_proxy_url(value)
 
         if os.path.exists(config_path):
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                # resolve proxy from config if present
-                proxy_from_config = _extract_proxy(config)
-                    
-                # 添加 Brave Search 搜索（优先级最高）
-                if 'brave' in config:
-                    brave_config = config['brave']
-                    if brave_config.get('api_key'):
-                        brave_proxy = (
-                            _extract_proxy(brave_config) or
-                            proxy_from_config
-                        )
-                        brave_engine = BraveSearch(
-                            api_key=brave_config['api_key'],
-                            proxy=brave_proxy
-                        )
-                        self.engines.append(brave_engine)
-                        logger.info("Brave Search engine initialized")
-                    
-                # 添加 Google 搜索
-                if 'google' in config:
-                    google_config = config['google']
-                    if (google_config.get('api_key') and
-                            google_config.get('cse_id')):
-                        google_proxy = (
-                            _extract_proxy(google_config) or
-                            proxy_from_config
-                        )
-                        google_engine = GoogleSearch(
-                            api_key=google_config['api_key'],
-                            cse_id=google_config['cse_id'],
-                            proxy=google_proxy
-                        )
-                        self.engines.append(google_engine)
-                        self.fallback_engines.append(google_engine)
-                        logger.info("Google search engine initialized")
-                
-                # 添加 SearXNG 搜索
-                if 'searxng' in config:
-                    searxng_config = config['searxng']
-                    base_url = searxng_config.get(
-                        'base_url', 'http://localhost:8080'
-                    )
-                    language = searxng_config.get('language', 'zh-CN')
-                    searxng_proxy = (
-                        _extract_proxy(searxng_config) or
-                        proxy_from_config
-                    )
-                    searxng_engine = SearXNGSearch(
-                        base_url=base_url,
-                        language=language,
-                        proxy=searxng_proxy
-                    )
-                    self.engines.append(searxng_engine)
-                    self.fallback_engines.append(searxng_engine)
-                    logger.info(
-                        f"SearXNG search engine initialized: {base_url}"
-                    )
-                    
             except Exception as e:
                 logger.error(
                     f"Failed to load search configuration: {e}"
                 )
-        
+                config = {}
+
+        proxy_from_config = _extract_proxy(config) if config else None
+
+        # Brave Search
+        brave_config = config.get('brave', {})
+        brave_api_key = (
+            brave_config.get('api_key') or
+            os.environ.get('BRAVE_API_KEY')
+        )
+        if brave_api_key:
+            brave_proxy = (
+                _extract_proxy(brave_config) or
+                _env_proxy_var('BRAVE_PROXY') or
+                proxy_from_config
+            )
+            brave_engine = BraveSearch(
+                api_key=brave_api_key,
+                proxy=brave_proxy
+            )
+            self.engines.append(brave_engine)
+            logger.info("Brave Search engine initialized")
+
+        # Google Search
+        google_config = config.get('google', {})
+        google_api_key = (
+            google_config.get('api_key') or
+            os.environ.get('GOOGLE_API_KEY')
+        )
+        google_cse_id = (
+            google_config.get('cse_id') or
+            os.environ.get('GOOGLE_CSE_ID')
+        )
+        if google_api_key and google_cse_id:
+            google_proxy = (
+                _extract_proxy(google_config) or
+                _env_proxy_var('GOOGLE_PROXY') or
+                proxy_from_config
+            )
+            google_engine = GoogleSearch(
+                api_key=google_api_key,
+                cse_id=google_cse_id,
+                proxy=google_proxy
+            )
+            self.engines.append(google_engine)
+            self.fallback_engines.append(google_engine)
+            logger.info("Google search engine initialized")
+
+        # SearXNG Search (only if configured via file or env)
+        searxng_config = config.get('searxng', {})
+        env_searx_base = os.environ.get('SEARXNG_BASE_URL')
+        if searxng_config or env_searx_base:
+            base_url = (
+                env_searx_base or
+                searxng_config.get('base_url') or
+                'http://localhost:28981'
+            )
+            language = (
+                searxng_config.get('language') or
+                os.environ.get('SEARXNG_LANGUAGE') or
+                'zh-CN'
+            )
+            searxng_proxy = (
+                _extract_proxy(searxng_config) or
+                _env_proxy_var('SEARXNG_PROXY') or
+                proxy_from_config
+            )
+            searxng_engine = SearXNGSearch(
+                base_url=base_url,
+                language=language,
+                proxy=searxng_proxy
+            )
+            self.engines.append(searxng_engine)
+            self.fallback_engines.append(searxng_engine)
+            logger.info(
+                f"SearXNG search engine initialized: {base_url}"
+            )
+
         # Always ensure DuckDuckGo is available as fallback
-        ddg_proxy = None
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    config2 = json.load(f)
-                ddg_proxy = (
-                    _extract_proxy(config2.get('duckduckgo', {})) or
-                    proxy_from_config
-                )
-        except Exception:
-            ddg_proxy = proxy_from_config
+        ddg_proxy = (
+            _extract_proxy(config.get('duckduckgo', {})) or
+            _env_proxy_var('DUCKDUCKGO_PROXY') or
+            proxy_from_config
+        )
 
         duckduckgo = DuckDuckGoSearch(proxy=ddg_proxy)
         # Put DuckDuckGo as lowest-priority fallback engine
@@ -668,9 +700,9 @@ class SearchManager:
                 "No engines configured, using DuckDuckGo as default"
             )
 
-    # Note: We don't inject env proxy here to preserve direct-first policy.
-    # Engines will try direct and only use configured proxy (from config.json)
-    # or an allowed env proxy explicitly on network failure.
+    # Note: We don't inject env proxy globally to preserve direct-first
+    # policy. Engines will try direct calls first and only use configured
+    # proxies (config.json/env) or rewrites on network failure.
                 
     async def search(
             self,

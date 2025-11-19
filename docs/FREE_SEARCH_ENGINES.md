@@ -138,7 +138,7 @@ RapidAPI 平台上有多个免费/低价搜索 API:
 
 ```bash
 # Docker 部署 SearXNG
-docker run -d -p 8080:8080 searxng/searxng
+docker run -d -p 28981:8080 searxng/searxng
 ```
 
 ### 2. **Whoogle Search**
@@ -300,11 +300,11 @@ services:
     image: searxng/searxng:latest
     container_name: searxng
     ports:
-      - "8080:8080"
+      - "28981:8080"
     volumes:
       - ./searxng:/etc/searxng:rw
     environment:
-      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_BASE_URL=http://localhost:28981/
     restart: unless-stopped
 ```
 
@@ -317,14 +317,14 @@ mkdir -p searxng
 docker-compose up -d
 
 # 访问 API
-curl "http://localhost:8080/search?q=test&format=json"
+curl "http://localhost:28981/search?q=test&format=json"
 ```
 
 ### API 调用示例
 ```python
 import requests
 
-def searxng_search(query, base_url="http://localhost:8080"):
+def searxng_search(query, base_url="http://localhost:28981"):
     """SearXNG 搜索"""
     url = f"{base_url}/search"
     params = {

@@ -16,55 +16,57 @@ SearXNG 是一个免费、开源的元搜索引擎，聚合多个搜索引擎的
 
 ## 🚀 快速开始
 
-### 方式 1: 使用 Docker (推荐)
+### 方式 1: 使用仓库内 Docker Compose (推荐)
 
-**一键启动 SearXNG:**
+该仓库内置 `docker/searxng/settings.yml`，已经开启 `json` 输出和 GET 查询，解决默认镜像 `format=json` 返回 403 的问题。
 
-```bash
-docker run -d -p 8080:8080 --name searxng searxng/searxng
-```
-
-**验证运行:**
+1. **启动本地实例**
 
 ```bash
-# 检查容器状态
-docker ps | grep searxng
-
-# 测试 API
-curl "http://localhost:8080/search?q=test&format=json"
+docker compose -f docker/docker-compose.yml up -d searxng
 ```
 
-### 方式 2: 使用 Docker Compose
-
-1. **创建 `docker-compose.yml`:**
-
-```yaml
-version: '3.7'
-
-services:
-  searxng:
-    image: searxng/searxng:latest
-    container_name: searxng
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./searxng:/etc/searxng:rw
-    environment:
-      - SEARXNG_BASE_URL=http://localhost:8080/
-    restart: unless-stopped
-```
-
-2. **启动服务:**
+2. **验证状态**
 
 ```bash
-docker-compose up -d
+docker compose -f docker/docker-compose.yml logs -f searxng
+curl "http://localhost:28981/search?q=test&format=json"
 ```
 
-3. **查看日志:**
+> ⚠️ 如果 `curl` 返回 403，请确认 `docker/searxng/settings.yml` 已挂载且 `formats` 中包含 `json`。
+
+> 🌐 代理提示：默认配置会把 `outgoing.proxies` 指向 `http://host.docker.internal:7890`。如使用其它端口或代理地址，请直接编辑 `docker/searxng/settings.yml` 中的 `outgoing.proxies` 段。
+
+### 代理连通性 & 自动重写
+
+- `docker/searxng/proxy-entrypoint.sh` 会把 `.env` 中的 `CRAWL4AI_HTTP_PROXY/HTTPS_PROXY/NO_PROXY` 注入到 SearXNG 容器, 从而继承宿主机代理设置。
+- HTTP Bridge 镜像支持 `CRAWL4AI_ALLOW_PROXY_REWRITE=true`, 可自动把 `http://127.0.0.1:*` 重写为 `http://host.docker.internal:<端口>`。利用 `HOST_PROXY_GATEWAY` 与 `HOST_PROXY_PORT_OVERRIDE` 可自定义出口地址/端口, 彻底解决 Clash 等本地代理在容器内不可访问的问题。
+
+3. **同时启动 HTTP Bridge**
 
 ```bash
-docker-compose logs -f searxng
+# 一键启动完整栈（SearXNG + HTTP Bridge）
+make docker-up
+
+# 或继续使用原生 docker compose
+docker compose -f docker/docker-compose.yml up -d
 ```
+
+`crawl4ai-http` 服务会自动通过 `http://searxng:8080` 访问该实例, `make docker-health` 可快速检查 `/health`。
+
+### 方式 2: 手动 Docker 运行
+
+如果只想运行一个容器，也可以直接使用镜像，但务必挂载项目提供的配置文件：
+
+```bash
+docker run -d \
+  -p 28981:8080 \
+  -v $(pwd)/docker/searxng/settings.yml:/etc/searxng/settings.yml:ro \
+  --name searxng \
+  searxng/searxng:latest
+```
+
+> 这样可以确保 `format=json` 和 GET 请求被允许，避免默认配置触发 403。
 
 ---
 
@@ -83,7 +85,7 @@ cp examples/config.example.json config.json
 ```json
 {
   "searxng": {
-    "base_url": "http://localhost:8080",
+    "base_url": "http://localhost:28981",
     "language": "zh-CN"
   }
 }
@@ -92,7 +94,7 @@ cp examples/config.example.json config.json
 #### 配置参数说明
 
 - **base_url**: SearXNG 实例地址
-  - 本地: `http://localhost:8080`
+  - 本地: `http://localhost:28981`
   - 远程: `https://your-server.com`
   - 公共实例: 见 [公共实例列表](#使用公共实例)
 
@@ -225,7 +227,7 @@ engines:
 
 ```bash
 docker run -d \
-  -p 8080:8080 \
+  -p 28981:8080 \
   -v $(pwd)/searxng:/etc/searxng:rw \
   --name searxng \
   searxng/searxng
@@ -259,7 +261,7 @@ docker run -d \
 
 **错误信息:**
 ```
-Connection refused to http://localhost:8080
+Connection refused to http://localhost:28981
 ```
 
 **解决方案:**
@@ -268,7 +270,7 @@ Connection refused to http://localhost:8080
 docker ps | grep searxng
 
 # 如果没有运行，启动它
-docker run -d -p 8080:8080 --name searxng searxng/searxng
+docker run -d -p 28981:8080 --name searxng searxng/searxng
 
 # 查看日志
 docker logs searxng
@@ -284,7 +286,7 @@ docker logs searxng
 **解决方案:**
 ```bash
 # 测试 SearXNG API
-curl "http://localhost:8080/search?q=test&format=json"
+curl "http://localhost:28981/search?q=test&format=json"
 
 # 检查配置
 cat config.json
@@ -314,7 +316,7 @@ docker restart searxng
 ```bash
 # 使用持久化存储
 docker run -d \
-  -p 8080:8080 \
+  -p 28981:8080 \
   -v searxng-data:/etc/searxng:rw \
   --restart=unless-stopped \
   --name searxng \
@@ -329,7 +331,7 @@ server {
     server_name search.example.com;
     
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:28981;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -342,7 +344,7 @@ server {
 ```json
 {
   "searxng": {
-    "base_url": "http://localhost:8080",
+    "base_url": "http://localhost:28981",
     "language": "zh-CN"
   },
   "google": {

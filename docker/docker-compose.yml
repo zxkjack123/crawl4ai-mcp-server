@@ -1,0 +1,84 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    env_file:
+      - ../.env
+    ports:
+      - "28981:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./searxng/proxy-entrypoint.sh:/opt/proxy-entrypoint.sh:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - HTTP_PROXY=${CRAWL4AI_HTTP_PROXY:-}
+      - HTTPS_PROXY=${CRAWL4AI_HTTPS_PROXY:-}
+      - NO_PROXY=${CRAWL4AI_NO_PROXY:-localhost,127.0.0.1,searxng}
+    entrypoint: ["/bin/sh", "/opt/proxy-entrypoint.sh"]
+    restart: unless-stopped
+
+  crawl4ai-http:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env
+    container_name: crawl4ai-http-bridge
+    depends_on:
+      - searxng
+    ports:
+      - "18080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - SERVER_MODE=http
+      - HTTP_PORT=8080
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
+      # API 密钥（从环境变量或 .env 文件读取）
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CSE_ID=${GOOGLE_CSE_ID:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      # 引擎级代理 (可选)
+      - BRAVE_PROXY=${BRAVE_PROXY:-}
+      - GOOGLE_PROXY=${GOOGLE_PROXY:-}
+      - DUCKDUCKGO_PROXY=${DUCKDUCKGO_PROXY:-}
+      - SEARXNG_PROXY=${SEARXNG_PROXY:-}
+      - SEARXNG_BASE_URL=${SEARXNG_BASE_URL:-http://searxng:8080}
+      - SEARXNG_LANGUAGE=${SEARXNG_LANGUAGE:-zh-CN}
+      # 代理设置（可选）
+      - HTTP_PROXY=${CRAWL4AI_HTTP_PROXY:-}
+      - HTTPS_PROXY=${CRAWL4AI_HTTPS_PROXY:-}
+      - NO_PROXY=${CRAWL4AI_NO_PROXY:-}
+      - CRAWL4AI_ALLOW_PROXY_REWRITE=${CRAWL4AI_ALLOW_PROXY_REWRITE:-0}
+      - HOST_PROXY_GATEWAY=${HOST_PROXY_GATEWAY:-}
+      - HOST_PROXY_PORT_OVERRIDE=${HOST_PROXY_PORT_OVERRIDE:-}
+      # 应用配置
+      - ENABLE_CACHE=true
+      - CACHE_TTL=3600
+      - ENABLE_RATE_LIMIT=true
+      - ENABLE_MONITORING=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ../config.json:/app/config.json:ro
+      - ../logs:/app/logs
+      - ../cache:/app/cache
+      - ../reports:/app/reports
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+networks:
+  default:
+    name: crawl4ai-network
