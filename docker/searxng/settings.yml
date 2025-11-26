@@ -173,9 +173,10 @@ ui:
 #
 outgoing:
   # default timeout in seconds, can be override by engine
-  request_timeout: 3.0
+  # 在代理环境下适当放宽超时时间,避免频繁 TIMEOUT
+  request_timeout: 8.0
   # the maximum timeout in seconds
-  # max_request_timeout: 10.0
+  max_request_timeout: 12.0
   # suffix of searxng_useragent, could contain information like an email address
   # to the administrator
   useragent_suffix: ""
@@ -203,8 +204,8 @@ outgoing:
   #  using_tor_proxy: true
   #
   # Extra seconds to add in order to account for the time taken by the proxy
-  #
-  #  extra_proxy_timeout: 10
+  # 在通过 HTTP 代理访问外网时,为每个请求额外预留一些时间
+  extra_proxy_timeout: 5
   #
   # uncomment below section only if you have more than one network interface
   # which can be the source of outgoing search requests
@@ -521,6 +522,7 @@ engines:
     # add "list" to the array to get results in the results list
     display_type: ["infobox"]
     categories: [general]
+    timeout: 8.0
 
   - name: bilibili
     engine: bilibili
@@ -807,6 +809,7 @@ engines:
   - name: duckduckgo
     engine: duckduckgo
     shortcut: ddg
+    timeout: 8.0
 
   - name: duckduckgo images
     engine: duckduckgo_extra
@@ -1013,6 +1016,7 @@ engines:
   - name: google
     engine: google
     shortcut: go
+    disabled: true
     # additional_tests:
     #   android: *test_android
 
@@ -1987,6 +1991,7 @@ engines:
     categories: [general, web]
     additional_tests:
       rosebud: *test_rosebud
+    disabled: true
 
   - name: startpage news
     engine: startpage
@@ -2622,6 +2627,7 @@ engines:
     paging: true
     categories: [general, web]
     brave_category: search
+    disabled: true
     # brave_spellcheck: true
 
   - name: brave.images

@@ -8,10 +8,12 @@
 
 ## 特性
 
-### 🚀 v0.5.9 新亮点
-- 🌐 **HTTP Bridge 定稿** - `src/rest_server.py` + `tests/test_rest_server*.py` 组成完整的 REST 层，第三方服务可直接通过 `/health`、`/search`、`/read_url` 复用搜索/爬取能力。
-- 🐳 **Compose + Makefile 一键联动** - `make docker-up` 会自动启动 HTTP Bridge 与 SearXNG，映射到宿主机 `18080/28981`，并继承 `.env` 中的 API Key、代理和缓存配置。
-- 🔁 **SearXNG 独立端口 28981** - Docker Compose、`.env.example`、`examples/CONFIG.md`、`docs/SEARXNG_INTEGRATION.md` 等文件全部切换到 28981，避免与常见服务 (Dify 等) 冲突，并在文档中补充了排查步骤。
+### 🚀 v0.5.10 新亮点
+- 🌐 **HTTP Bridge 定稿** *(承接 v0.5.9)* - `src/rest_server.py` + `tests/test_rest_server*.py` 组成完整的 REST 层，第三方服务可直接通过 `/health`、`/search`、`/read_url` 复用搜索/爬取能力。
+- 🐳 **Compose + Makefile 一键联动** *(承接 v0.5.9)* - `make docker-up` 会自动启动 HTTP Bridge 与 SearXNG，映射到宿主机 `18080/28981`，并继承 `.env` 中的 API Key、代理和缓存配置。
+- 🔁 **SearXNG 独立端口 28981** *(承接 v0.5.9)* - Docker Compose、`.env.example`、`examples/CONFIG.md`、`docs/SEARXNG_INTEGRATION.md` 等文件全部切换到 28981，避免与常见服务 (Dify 等) 冲突，并在文档中补充了排查步骤。
+- 🧩 **VS Code + MCP 配置修正** - `docs/VSCODE_INTEGRATION.md` 新增示例: 宿主机直连 MCP 服务器时使用 `SERVER_MODE=mcp` 与 `SEARXNG_BASE_URL=http://localhost:28981`，而 Docker 内 HTTP Bridge 继续使用 `http://searxng:8080`，保证 `@crawl4ai search` 与 HTTP `/search` 返回一致结果。
+- 🧪 **并发搜索测试更友好** - 当 CI / 本地环境完全离线或未启动 SearXNG 时, 并发搜索集成测试会自动跳过, 避免把网络/环境问题误判为功能回归; 在至少一个引擎可用时仍严格校验行为。
 
 ### 🎉 v0.5.0 新功能
 - 💾 **缓存持久化** - SQLite持久化存储，双层缓存架构(内存+数据库)，75%性能提升

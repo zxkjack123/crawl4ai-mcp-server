@@ -35,7 +35,10 @@ Add the following configuration to your `settings.json`:
             "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
           ],
           "env": {
-            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
+            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
+            "SERVER_MODE": "mcp",
+            "SEARXNG_BASE_URL": "http://localhost:28981",
+            "SEARXNG_LANGUAGE": "zh-CN"
           }
         }
       }
@@ -82,7 +85,10 @@ Add the following content:
         "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
       ],
       "env": {
-        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
+        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
+        "SERVER_MODE": "mcp",
+        "SEARXNG_BASE_URL": "http://localhost:28981",
+        "SEARXNG_LANGUAGE": "zh-CN"
       }
     }
   }
@@ -110,7 +116,13 @@ In your project root, create or edit `.vscode/settings.json`:
           "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
           "args": [
             "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-          ]
+          ],
+          "env": {
+            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
+            "SERVER_MODE": "mcp",
+            "SEARXNG_BASE_URL": "http://localhost:28981",
+            "SEARXNG_LANGUAGE": "zh-CN"
+          }
         }
       }
     }
@@ -206,6 +218,9 @@ If you need to configure API keys or other settings:
           ],
           "env": {
             "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
+            "SERVER_MODE": "mcp",
+            "SEARXNG_BASE_URL": "http://localhost:28981",
+            "SEARXNG_LANGUAGE": "zh-CN",
             "GOOGLE_API_KEY": "your-api-key",
             "GOOGLE_CSE_ID": "your-cse-id"
           }
@@ -213,6 +228,13 @@ If you need to configure API keys or other settings:
       }
     }
   }
+
+> 💡 **Host vs Docker reminder**
+>
+> - 当你在 **Docker** 中运行 HTTP Bridge 时,容器内部会使用 `SEARXNG_BASE_URL=http://searxng:8080` 访问 SearXNG 服务。
+> - 当你在 **宿主机** 上以 MCP 模式运行 `src/index.py` 并被 VS Code 调用时,建议显式设置
+>   `SEARXNG_BASE_URL=http://localhost:28981` 与 `SERVER_MODE=mcp`,这样 `@crawl4ai search` 的行为就能与
+>   Docker HTTP `/search` 完全对齐,避免出现 “HTTP 有结果、MCP 为空数组([])” 的情况。
 }
 ```
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.10] - 2025-11-26
+
+### Added
+- 🧩 VS Code 集成文档现在包含完整的 MCP 配置示例,明确区分 **容器内 HTTP Bridge** (`SEARXNG_BASE_URL=http://searxng:8080`) 与 **宿主机直连 MCP 服务器** (`SEARXNG_BASE_URL=http://localhost:28981`, `SERVER_MODE=mcp`), 确保 Copilot 使用 MCP 时与 HTTP `/search` 行为保持一致。
+
+### Changed
+- 🧪 并发搜索集成测试(`tests/test_concurrent_search.py`)在所有引擎均返回空结果(例如: CI / 离线环境或未启动 SearXNG)时,会自动 **skip** 而不是失败,避免把网络/环境问题误判为功能回归;在至少一个引擎可用时,仍严格校验行为。
+
+### Tested
+- ✅ `.venv/bin/pytest -q` — 75 tests 通过,2 个并发搜索集成测试在无可用搜索引擎时被自动跳过(离线环境),在实际在线环境中仍会完整执行。
+
 ## [0.5.9] - 2025-11-19
 
 ### Added
