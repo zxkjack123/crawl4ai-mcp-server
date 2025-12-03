@@ -45,6 +45,8 @@ class FakeAsyncWebCrawler:
         self.config = config
         # BrowserConfig has attribute 'proxy'; default None for direct
         self.proxy = getattr(config, 'proxy', None)
+        if not self.proxy and hasattr(config, 'proxy_config'):
+             self.proxy = config.proxy_config
         FakeAsyncWebCrawler.created_instances.append(self)
 
     async def __aenter__(self):
@@ -89,8 +91,15 @@ async def test_read_url_retries_via_proxy_and_succeeds(monkeypatch):
     # Two crawler instances should be created: direct (no proxy) then proxied
     assert len(FakeAsyncWebCrawler.created_instances) >= 2
     proxies = [inst.proxy for inst in FakeAsyncWebCrawler.created_instances]
+    print(f"DEBUG: proxies found: {proxies}")
     assert proxies[0] in (None, "")  # direct first
-    assert any(p == "http://127.0.0.1:7890" for p in proxies)
+    
+    def get_proxy_url(p):
+        if hasattr(p, 'server'):
+            return p.server
+        return p
+
+    assert any(get_proxy_url(p) == "http://127.0.0.1:7890" for p in proxies)
 
 
 @pytest.mark.asyncio

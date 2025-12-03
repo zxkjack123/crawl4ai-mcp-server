@@ -31,15 +31,20 @@ crawler_proxy_url = None
 search_manager = None
 start_time = time.time()  # 记录服务启动时间
 
+# Locks for thread-safe initialization
+crawler_lock = asyncio.Lock()
+search_lock = asyncio.Lock()
+
 
 async def initialize_search_manager():
     global search_manager
-    if search_manager is None:
-        search_manager = SearchManager()
-    print(
-        "Search manager initialized with engines:",
-        [type(e).__name__ for e in search_manager.engines]
-    )
+    async with search_lock:
+        if search_manager is None:
+            search_manager = SearchManager()
+            print(
+                "Search manager initialized with engines:",
+                [type(e).__name__ for e in search_manager.engines]
+            )
 
 
 def _config_path() -> Path:
@@ -114,28 +119,30 @@ def _resolve_crawler_proxy_url() -> str | None:
 
 async def initialize_crawler():
     global crawler, crawler_proxy_url
-    if crawler is not None:
-        return
-    # Always initialize a direct (no-proxy) crawler first to honor
-    # direct-first policy
-    browser_config = BrowserConfig(headless=True)
-    crawler = AsyncWebCrawler(config=browser_config)
-    await crawler.__aenter__()
-    # Resolve proxy URL for possible later fallback use
-    # (lazy init of proxied crawler)
-    if crawler_proxy_url is None:
-        crawler_proxy_url = _resolve_crawler_proxy_url()
+    async with crawler_lock:
+        if crawler is not None:
+            return
+        # Always initialize a direct (no-proxy) crawler first to honor
+        # direct-first policy
+        browser_config = BrowserConfig(headless=True)
+        crawler = AsyncWebCrawler(config=browser_config)
+        await crawler.__aenter__()
+        # Resolve proxy URL for possible later fallback use
+        # (lazy init of proxied crawler)
+        if crawler_proxy_url is None:
+            crawler_proxy_url = _resolve_crawler_proxy_url()
 
 
 async def initialize_crawler_proxy():
     """Initialize the proxied crawler lazily when needed."""
     global crawler_proxy
-    if crawler_proxy is not None:
-        return
-    if crawler_proxy_url:
-        proxy_cfg = BrowserConfig(headless=True, proxy=crawler_proxy_url)
-        crawler_proxy = AsyncWebCrawler(config=proxy_cfg)
-        await crawler_proxy.__aenter__()
+    async with crawler_lock:
+        if crawler_proxy is not None:
+            return
+        if crawler_proxy_url:
+            proxy_cfg = BrowserConfig(headless=True, proxy=crawler_proxy_url)
+            crawler_proxy = AsyncWebCrawler(config=proxy_cfg)
+            await crawler_proxy.__aenter__()
 
 
 async def close_crawler():
@@ -164,8 +171,10 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
             - markdown: The default markdown format
     """
     global crawler_proxy_url
-    if not crawler:
-        await initialize_crawler()
+    await initialize_crawler()
+    
+    if crawler is None:
+         return json.dumps({"error": "Failed to initialize crawler"}, ensure_ascii=False)
     
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
@@ -177,20 +186,51 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
     )
 
     def _extract_content(res_obj):
+        """Safely extract the requested markdown variant from crawler result."""
+
+        if res_obj is None:
+            raise ValueError(
+                "Crawler returned no content. The target site may be unreachable "
+                "or blocked (check network/proxy settings)."
+            )
+
+        # Try to get markdown_v2 (newer versions)
+        markdown_v2 = getattr(res_obj, "markdown_v2", None)
+        
+        # Fallback to markdown (older versions like 0.4.248)
+        if markdown_v2 is None:
+            markdown_legacy = getattr(res_obj, "markdown", None)
+            if markdown_legacy:
+                # In some versions, markdown is an object with raw_markdown
+                if hasattr(markdown_legacy, "raw_markdown"):
+                    # For legacy, we might not support all formats, so return raw
+                    return markdown_legacy.raw_markdown
+                # In others, it might be the string itself
+                if isinstance(markdown_legacy, str):
+                    return markdown_legacy
+            
+            # If both are missing, raise error
+            raise ValueError(
+                "Crawler result missing markdown data (checked 'markdown_v2' and 'markdown'). "
+                "Ensure the Crawl4AI markdown generator is enabled and the target responded with HTML."
+            )
+
         if format == "raw_markdown":
-            return res_obj.markdown_v2.raw_markdown
+            return markdown_v2.raw_markdown
         elif format == "markdown_with_citations":
-            return res_obj.markdown_v2.markdown_with_citations
+            return markdown_v2.markdown_with_citations
         elif format == "references_markdown":
-            return res_obj.markdown_v2.references_markdown
+            return markdown_v2.references_markdown
         elif format == "fit_markdown":
-            return res_obj.markdown_v2.fit_markdown
+            return markdown_v2.fit_markdown
         elif format == "fit_html":
-            return res_obj.markdown_v2.fit_html
+            return markdown_v2.fit_html
         else:
-            return res_obj.markdown_v2.markdown_with_citations
+            return markdown_v2.markdown_with_citations
 
     async def _run_with(cwlr):
+        if cwlr is None:
+             raise ValueError("Crawler instance is not initialized")
         res = await cwlr.arun(url=url, config=run_config)
         content = _extract_content(res)
         # ensure UTF-8 string
@@ -230,9 +270,11 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
         # 2) Retry via configured/env proxy if available
         msg = str(e)
         print(f"Direct crawl failed, considering proxy retry: {msg}")
-        if crawler_proxy is None and (
-            crawler_proxy_url or _env_proxy_http_https()
-        ):
+
+        # Check if we have a proxy to try (either already init or available in config/env)
+        has_proxy_config = crawler_proxy_url or _env_proxy_http_https()
+
+        if crawler_proxy is not None or has_proxy_config:
             if crawler_proxy_url is None:
                 # resolve once if not done earlier
                 # note: this will also consider env
@@ -270,6 +312,9 @@ async def search(
             - "searxng": 使用SearXNG搜索(需要部署实例,完全免费无限制)
             - "all": 使用所有已配置的搜索引擎
     """
+    if num_results < 1:
+        num_results = 10
+
     try:
         await initialize_search_manager()
         if not search_manager or not search_manager.engines:
@@ -338,7 +383,7 @@ async def system_status(check_type: str = "health") -> str:
             
             health_data = {
                 "status": "healthy",
-                "version": "0.5.9",
+                "version": "0.6.0",
                 "uptime_seconds": round(uptime_seconds, 2),
                 "uptime_hours": round(uptime_hours, 2),
                 "components": {
@@ -413,7 +458,7 @@ async def system_status(check_type: str = "health") -> str:
             metrics_data = {
                 "service": {
                     "uptime_seconds": round(uptime_seconds, 2),
-                    "version": "0.5.9"
+                    "version": "0.6.0"
                 },
                 "system": {
                     "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -457,13 +502,6 @@ async def system_status(check_type: str = "health") -> str:
             "error": str(e),
             "timestamp": time.time()
         }, ensure_ascii=False, indent=2)
-    except Exception as e:
-        error_health = {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": time.time()
-        }
-        return json.dumps(error_health, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
@@ -651,7 +689,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.5.9"
+                "version": "0.6.0"
             }
         
         # 确保输出目录存在

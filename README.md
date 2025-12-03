@@ -180,6 +180,7 @@ run_tests.bat    # CMD
 ### 集成教程
 - 🔧 [VS Code 集成](docs/VSCODE_INTEGRATION.md) - MCP 配置
 - 🎨 [Cherry Studio 集成](docs/CHERRY_STUDIO_INTEGRATION.md) - 其他客户端
+- 🌐 [Docker HTTP 服务接入](docs/HTTP_BRIDGE_USAGE.md) - 让第三方服务通过 Docker API 复用 Crawl4AI
 
 ### 配置和 API
 - ⚙️ [配置说明](examples/CONFIG.md) - 配置文件详解

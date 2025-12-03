@@ -5,7 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-12-03
+
+### Added
+- **Dependency Upgrade**: Upgraded `Crawl4AI` to v0.7.7 and `Playwright` to v1.56.0.
+- **Proxy Retry Logic**: Implemented robust retry mechanism for `read_url`. If a direct connection fails (e.g., blocked by firewall), the system automatically retries using the configured proxy.
+- **Markdown V2 Support**: Added native support for `markdown_v2` structured output from Crawl4AI v0.7.x, ensuring better compatibility and richer content extraction.
+- **Concurrency Safety**: Added `asyncio.Lock` to initialization routines (`initialize_crawler`, `initialize_search_manager`) to prevent race conditions during high concurrency.
+
+### Changed
+- **Docker Base Image**: Updated Dockerfile to install fresh browser binaries compatible with Playwright v1.56.0.
+- **Error Handling**: Improved error messages for missing content or initialization failures.
+- **Version Bump**: Project version updated to 0.6.0.
+
+### Fixed
+- **Proxy Connection**: Resolved `net::ERR_PROXY_CONNECTION_FAILED` by ensuring the host proxy binds to `0.0.0.0` and the container uses `host.docker.internal`.
+- **Markdown Extraction**: Fixed `AttributeError` when accessing `markdown_v2` on older library versions (now fully upgraded).
+
 ## [Unreleased]
+- ✍️ 新增文档 [docs/HTTP_BRIDGE_USAGE.md](docs/HTTP_BRIDGE_USAGE.md), 详细说明如何通过 Docker Stack 将 crawl4ai HTTP Bridge 暴露给其他服务,涵盖端口映射、健康检查、`/search`/`/read_url` API 示范以及上游集成建议。
 
 ## [0.5.10] - 2025-11-26
 

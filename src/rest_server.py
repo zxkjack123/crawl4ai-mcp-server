@@ -15,7 +15,7 @@ try:  # pragma: no cover - attempt absolute import when package context is avail
 except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
     index = importlib.import_module("index")
 
-app = FastAPI(title="Crawl4AI HTTP Bridge", version="0.5.9")
+app = FastAPI(title="Crawl4AI HTTP Bridge", version="0.6.0")
 
 
 class SearchRequest(BaseModel):
