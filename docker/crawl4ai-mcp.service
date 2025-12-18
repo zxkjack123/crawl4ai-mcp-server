@@ -1,0 +1,19 @@
+[Unit]
+Description=Crawl4AI MCP (docker compose)
+# NOTE: This unit file is a template. The install script replaces @REPO_ROOT@
+# with the absolute path to your local clone before installing it into
+# /etc/systemd/system/.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=@REPO_ROOT@
+ExecStart=/usr/bin/docker compose -f @REPO_ROOT@/docker/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f @REPO_ROOT@/docker/docker-compose.yml stop
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
