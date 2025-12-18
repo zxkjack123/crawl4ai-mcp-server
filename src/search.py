@@ -4,14 +4,20 @@ import asyncio
 import httpx
 import json
 import os
+import re
 import logging
 import time
 from abc import ABC, abstractmethod
 # Prefer the new 'ddgs' package and fall back to the legacy name if needed
 try:
     from ddgs import DDGS  # new package name (no deprecation warning)
+    try:  # ddgs-only: used to build a safe default backend list (exclude wikipedia)
+        from ddgs.engines import ENGINES as _DDGS_ENGINES  # type: ignore
+    except Exception:  # pragma: no cover
+        _DDGS_ENGINES = None
 except Exception:  # pragma: no cover - fallback for environments without ddgs
     from duckduckgo_search import DDGS  # legacy package name
+    _DDGS_ENGINES = None
 
 # Use relative import or direct import depending on context
 try:
@@ -36,6 +42,58 @@ except ImportError:
     )
 
 logger = logging.getLogger(__name__)
+
+
+_DDGS_REGION_RE = re.compile(r"^[a-z]{2}-[a-z]{2,3}$")
+
+
+def normalize_ddgs_region(region: Optional[str]) -> str:
+    """Normalize/validate ddgs region to avoid known-bad values.
+
+    ddgs expects a string like "us-en" (country-language). Some legacy/special
+    values used in other tooling (e.g. "wt-wt") are *not* valid Wikipedia
+    language subdomains and can trigger requests to non-existent hosts like
+    "wt.wikipedia.org".
+    """
+    raw = (region or "").strip().lower()
+    if not raw:
+        return "us-en"
+
+    # Explicitly disallow the legacy worldwide code.
+    if raw == "wt-wt":
+        return "us-en"
+
+    # ddgs wikipedia engine splits on '-', so we only allow a single delimiter.
+    if not _DDGS_REGION_RE.match(raw):
+        return "us-en"
+
+    country, lang = raw.split("-", 1)
+    # Some proxies/DNS setups may synthesize records for non-existent lang
+    # subdomains; keep a small denylist for known-invalid values.
+    if lang in {"wt", "all"}:
+        return "us-en"
+    return f"{country}-{lang}"
+
+
+def _ddgs_text_backends_without_wikipedia() -> Optional[str]:
+    """Return a comma-delimited ddgs backend list for text searches.
+
+    When ddgs backend is "auto" (default), ddgs always includes the Wikipedia
+    engine for text searches. This is great for "instant answers" but can hurt
+    stability in environments where Wikipedia domains are blocked or DNS is
+    polluted. Returning an explicit backend list avoids Wikipedia entirely.
+    """
+    if not _DDGS_ENGINES:
+        return None
+    try:
+        keys = list(_DDGS_ENGINES.get("text", {}).keys())
+        keys = [k for k in keys if k != "wikipedia"]
+        if not keys:
+            return None
+        # Deterministic order; ddgs itself shuffles internally anyway.
+        return ",".join(sorted(keys))
+    except Exception:
+        return None
 
 
 class SearchResult:
@@ -65,13 +123,72 @@ class SearchEngine(ABC):
 
 
 class DuckDuckGoSearch(SearchEngine):
-    def __init__(self, proxy: Optional[str] = None):
+    def __init__(
+        self,
+        proxy: Optional[str] = None,
+        region: Optional[str] = None,
+        backend: Optional[str] = None,
+        include_wikipedia: Optional[bool] = None,
+    ):
         self.ddgs = DDGS()
         self.proxy = proxy
+        self.region = region
+        # ddgs "backend" selects which internal engines to use (e.g. "auto",
+        # "duckduckgo", or a comma-delimited list like "duckduckgo,brave").
+        # NOTE: In ddgs, "backend" is NOT "html/lite/api".
+        self.backend = backend
+        # If False, we will avoid ddgs' Wikipedia engine by using an explicit
+        # backend list; this prevents issues caused by Wikipedia being blocked
+        # or by invalid/wrongly-resolved subdomains.
+        self.include_wikipedia = include_wikipedia
 
     async def search(
         self, query: str, num_results: int = 10
     ) -> List[SearchResult]:
+        def _ddg_region() -> str:
+            # Prefer explicit ctor override, then env vars; normalize to avoid
+            # known-bad values like "wt-wt".
+            raw = (
+                self.region or
+                os.environ.get('DDG_REGION') or
+                os.environ.get('DDGS_REGION') or
+                os.environ.get('DUCKDUCKGO_REGION')
+            )
+            return normalize_ddgs_region(raw)
+
+        def _parse_bool(value: Optional[str]) -> Optional[bool]:
+            if value is None:
+                return None
+            v = value.strip().lower()
+            if v in {"1", "true", "yes", "y", "on"}:
+                return True
+            if v in {"0", "false", "no", "n", "off"}:
+                return False
+            return None
+
+        def _ddg_backend() -> Optional[str]:
+            # 1) explicit override from ctor/env
+            explicit = (
+                self.backend or
+                os.environ.get('DDGS_TEXT_BACKEND') or
+                os.environ.get('DDG_BACKEND') or
+                os.environ.get('DDGS_BACKEND')
+            )
+            if explicit:
+                return explicit
+
+            # 2) default: avoid Wikipedia unless explicitly enabled.
+            include_wiki = self.include_wikipedia
+            if include_wiki is None:
+                include_wiki = _parse_bool(
+                    os.environ.get('DDG_INCLUDE_WIKIPEDIA') or
+                    os.environ.get('DDGS_INCLUDE_WIKIPEDIA')
+                )
+            if include_wiki is True:
+                return None
+
+            return _ddgs_text_backends_without_wikipedia()
+
         def _env_proxy() -> Optional[str]:
             https_proxy = (
                 os.environ.get('HTTPS_PROXY') or
@@ -117,11 +234,16 @@ class DuckDuckGoSearch(SearchEngine):
 
         # 1) direct attempt
         try:
+            ddg_kwargs: Dict[str, Any] = {}
+            backend = _ddg_backend()
+            if backend:
+                ddg_kwargs['backend'] = backend
             raw_results = self.ddgs.text(
                 query,
-                region="wt-wt",
+                region=_ddg_region(),
                 safesearch="moderate",
-                max_results=num_results
+                max_results=num_results,
+                **ddg_kwargs,
             )
             results = _collect(raw_results)
             if results:
@@ -140,11 +262,16 @@ class DuckDuckGoSearch(SearchEngine):
             try:
                 ddgs_proxy = _new_ddgs_with_proxy(proxy_to_use)
                 if ddgs_proxy is not None:
+                    ddg_kwargs = {}
+                    backend = _ddg_backend()
+                    if backend:
+                        ddg_kwargs['backend'] = backend
                     raw_results = ddgs_proxy.text(
                         query,
-                        region="wt-wt",
+                        region=_ddg_region(),
                         safesearch="moderate",
-                        max_results=num_results
+                        max_results=num_results,
+                        **ddg_kwargs,
                     )
                     results = _collect(raw_results)
                     if results:
@@ -685,13 +812,57 @@ class SearchManager:
             )
 
         # Always ensure DuckDuckGo is available as fallback
+        duckduckgo_config = config.get('duckduckgo', {})
         ddg_proxy = (
-            _extract_proxy(config.get('duckduckgo', {})) or
+            _extract_proxy(duckduckgo_config) or
             _env_proxy_var('DUCKDUCKGO_PROXY') or
             proxy_from_config
         )
 
-        duckduckgo = DuckDuckGoSearch(proxy=ddg_proxy)
+        ddg_region = (
+            duckduckgo_config.get('region') or
+            os.environ.get('DDG_REGION') or
+            os.environ.get('DDGS_REGION') or
+            os.environ.get('DUCKDUCKGO_REGION')
+        )
+        ddg_backend = (
+            duckduckgo_config.get('ddgs_backend') or
+            duckduckgo_config.get('text_backend') or
+            duckduckgo_config.get('backend') or
+            os.environ.get('DDGS_TEXT_BACKEND') or
+            os.environ.get('DDG_BACKEND') or
+            os.environ.get('DDGS_BACKEND')
+        )
+
+        def _parse_bool(value: Any) -> Optional[bool]:
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                return value
+            if not isinstance(value, str):
+                return None
+            v = value.strip().lower()
+            if v in {"1", "true", "yes", "y", "on"}:
+                return True
+            if v in {"0", "false", "no", "n", "off"}:
+                return False
+            return None
+
+        ddg_include_wikipedia = _parse_bool(
+            duckduckgo_config.get('include_wikipedia')
+        )
+        if ddg_include_wikipedia is None:
+            ddg_include_wikipedia = _parse_bool(
+                os.environ.get('DDG_INCLUDE_WIKIPEDIA') or
+                os.environ.get('DDGS_INCLUDE_WIKIPEDIA')
+            )
+
+        duckduckgo = DuckDuckGoSearch(
+            proxy=ddg_proxy,
+            region=ddg_region,
+            backend=ddg_backend,
+            include_wikipedia=ddg_include_wikipedia,
+        )
         # Put DuckDuckGo as lowest-priority fallback engine
         self.fallback_engines.append(duckduckgo)
         if not self.engines:
@@ -787,9 +958,15 @@ class SearchManager:
             ]
             engines_to_try = all_engines
         elif engine.lower() == "auto":
-            # 自动模式：优先使用配置的引擎，失败时回退
+            # 自动模式：优先使用配置的引擎，失败时自动回退到 fallback_engines
+            # 重要：fallback_engines 通常包含 DuckDuckGo 等“兜底”引擎。
+            # 如果只尝试 self.engines（例如 Brave/Google/SearXNG），在这些
+            # 引擎不可用/返回空结果时会导致整体返回空，违背“自动回退”语义。
             if self.engines:
-                engines_to_try = self.engines
+                engines_to_try = self.engines + [
+                    e for e in self.fallback_engines
+                    if e not in self.engines
+                ]
             else:
                 engines_to_try = self.fallback_engines
         else:

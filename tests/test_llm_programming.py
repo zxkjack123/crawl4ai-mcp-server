@@ -9,7 +9,7 @@ import sys
 import os
 
 # Add the src directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
 from search import SearchManager
 
@@ -71,7 +71,7 @@ async def test_search_with_multiple_queries():
     
     # Save all results
     if all_results:
-        output_file = "/home/gw/opt/crawl4ai-mcp-server/llm_search_results.json"
+        output_file = "output/llm_search_results.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2)
         
