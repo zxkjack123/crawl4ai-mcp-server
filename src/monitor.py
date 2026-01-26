@@ -17,6 +17,11 @@ from pathlib import Path
 from collections import defaultdict
 import threading
 
+try:  # pragma: no cover
+    from src.logging_filters import RequestIdFilter
+except Exception:  # pragma: no cover
+    from logging_filters import RequestIdFilter
+
 
 # ============================================================
 # 结构化日志配置
@@ -40,7 +45,7 @@ def setup_logging(
     """
     if log_format is None:
         log_format = (
-            "%(asctime)s - %(name)s - %(levelname)s - "
+            "%(asctime)s - %(name)s - %(levelname)s - [rid=%(request_id)s] - "
             "%(funcName)s:%(lineno)d - %(message)s"
         )
     
@@ -50,6 +55,15 @@ def setup_logging(
         format=log_format,
         datefmt="%Y-%m-%d %H:%M:%S"
     )
+
+    # Ensure request_id is always present on log records.
+    # Attach filter to all root handlers created by basicConfig.
+    try:
+        root = logging.getLogger()
+        for h in list(getattr(root, "handlers", []) or []):
+            h.addFilter(RequestIdFilter())
+    except Exception:
+        pass
     
     logger = logging.getLogger("crawl4ai_mcp_server")
     logger.setLevel(level)
@@ -193,8 +207,10 @@ class SearchMetrics:
     engine: str
     start_time: float
     end_time: float = 0.0
+    request_id: Optional[str] = None
     success: bool = False
     cached: bool = False
+    coalesced: bool = False
     num_results: int = 0
     error: Optional[str] = None
     
@@ -209,9 +225,10 @@ class SearchMetrics:
             "query": self.query,
             "engine": self.engine,
             "duration": round(self.duration, 3),
+            "request_id": self.request_id,
             "success": self.success,
             "cached": self.cached,
-            "num_results": self.num_results,
+            "coalesced": self.coalesced,
             "error": self.error,
             "timestamp": datetime.fromtimestamp(
                 self.start_time
@@ -227,6 +244,7 @@ class EngineStats:
     successful_requests: int = 0
     failed_requests: int = 0
     cached_requests: int = 0
+    coalesced_requests: int = 0
     total_duration: float = 0.0
     total_results: int = 0
     errors: List[str] = field(default_factory=list)
@@ -244,6 +262,13 @@ class EngineStats:
         if self.total_requests == 0:
             return 0.0
         return self.cached_requests / self.total_requests
+
+    @property
+    def coalesced_rate(self) -> float:
+        """请求合并占比（in-flight request coalescing）"""
+        if self.total_requests == 0:
+            return 0.0
+        return self.coalesced_requests / self.total_requests
     
     @property
     def avg_duration(self) -> float:
@@ -267,8 +292,10 @@ class EngineStats:
             "successful_requests": self.successful_requests,
             "failed_requests": self.failed_requests,
             "cached_requests": self.cached_requests,
+            "coalesced_requests": self.coalesced_requests,
             "success_rate": round(self.success_rate * 100, 2),
             "cache_hit_rate": round(self.cache_hit_rate * 100, 2),
+            "coalesced_rate": round(self.coalesced_rate * 100, 2),
             "avg_duration": round(self.avg_duration, 3),
             "avg_results": round(self.avg_results, 1),
             "total_duration": round(self.total_duration, 3),
@@ -296,7 +323,7 @@ class PerformanceMonitor:
     def record_search(self, metrics: SearchMetrics):
         """
         记录搜索指标
-        
+
         Args:
             metrics: 搜索指标
         """
@@ -317,6 +344,9 @@ class PerformanceMonitor:
             
             if metrics.cached:
                 stats.cached_requests += 1
+
+            if getattr(metrics, "coalesced", False):
+                stats.coalesced_requests += 1
             
             # 记录最近搜索
             self.recent_searches.append(metrics)
@@ -363,6 +393,11 @@ class PerformanceMonitor:
             cached_requests = sum(
                 s.cached_requests for s in self.engine_stats.values()
             )
+
+            coalesced_requests = sum(
+                getattr(s, "coalesced_requests", 0)
+                for s in self.engine_stats.values()
+            )
             
             uptime = time.time() - self.start_time
             
@@ -372,6 +407,7 @@ class PerformanceMonitor:
                 "successful_requests": successful_requests,
                 "failed_requests": total_requests - successful_requests,
                 "cached_requests": cached_requests,
+                "coalesced_requests": coalesced_requests,
                 "success_rate": round(
                     (successful_requests / total_requests * 100)
                     if total_requests > 0 else 0.0,
@@ -381,6 +417,11 @@ class PerformanceMonitor:
                     (cached_requests / total_requests * 100)
                     if total_requests > 0 else 0.0,
                     2
+                ),
+                "coalesced_rate": round(
+                    (coalesced_requests / total_requests * 100)
+                    if total_requests > 0 else 0.0,
+                    2,
                 ),
                 "engines": len(self.engine_stats),
                 "recent_searches_count": len(self.recent_searches),

@@ -28,10 +28,10 @@
 
 #### Google Custom Search API
 - **状态**: ✅ 正常工作
-- **API Key**: `AIzaSyD7upQYiTOjxxQXYeGAXzMk-61p-2PlyE8`
-- **CSE ID**: `e7250f42e66574df7`
+- **API Key**: `YOUR_GOOGLE_API_KEY`
+- **CSE ID**: `YOUR_GOOGLE_CSE_ID`
 - **配额**: 100次/天（免费）
-- **Project ID**: 111944390041
+- **Project ID**: YOUR_GOOGLE_PROJECT_ID
 
 **关键修复**:
 - ❌ 初始错误: 使用了 OAuth 客户端密钥 (GOCSPX-...)
@@ -215,7 +215,7 @@ MCP 服务器已配置，重启 VS Code 后自动可用：
 ### 3. 查看配额
 访问 Google Cloud Console:
 ```
-https://console.cloud.google.com/apis/api/customsearch.googleapis.com/metrics?project=111944390041
+https://console.cloud.google.com/apis/api/customsearch.googleapis.com/metrics?project=YOUR_GOOGLE_PROJECT_ID
 ```
 
 ---

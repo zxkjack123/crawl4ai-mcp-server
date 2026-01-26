@@ -568,6 +568,27 @@ SearchManager.search()
 
 ---
 
+## 生产稳定性增强（后续补丁）
+
+以下能力属于面向生产环境的稳定性/可观测性增强（不改变 Phase 2 的“四大核心功能”结构），可按需开启/调参。
+
+### 1) Request ID 端到端可观测
+
+- HTTP Bridge 每个响应都会返回 `X-Request-Id`。
+- 客户端可自行传入 `X-Request-Id`，服务端会原样回传。
+- 服务端日志与监控会携带 `request_id` 字段，便于把“某个请求”在日志/指标中串起来定位尾延迟与失败原因。
+
+### 2) 引擎级熔断（Circuit Breaker）
+
+当某个搜索引擎持续失败时，熔断器会短时间“快速失败”该引擎，避免反复等待超时，从而改善尾延迟并保护上游。
+
+环境变量（见 `.env.example`）：
+
+- `CRAWL4AI_ENGINE_CIRCUIT_BREAKER=1`：启用/关闭
+- `CRAWL4AI_CB_FAILURE_THRESHOLD=5`：连续失败阈值
+- `CRAWL4AI_CB_OPEN_SECONDS=30`：打开熔断的持续时间
+- 支持按引擎覆盖：`CRAWL4AI_CB_FAILURE_THRESHOLD_GOOGLE` / `CRAWL4AI_CB_OPEN_SECONDS_GOOGLE` 等
+
 ## 未来规划
 
 Phase 2 已完成，下一步计划：

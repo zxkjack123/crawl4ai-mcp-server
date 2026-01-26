@@ -275,11 +275,13 @@ run_tests.bat    # CMD
 ```
 
 配置说明:
-- **Brave**: 需要在 `config.json` 中配置 API 密钥
+- **Brave**: 需要配置 API 密钥（推荐使用环境变量/`.env`：`BRAVE_API_KEY`；也可放在本地 `config.json`）
 - **DuckDuckGo**: 无需配置
-- **Google**: 需要在 `config.json` 中配置 API 密钥
-- **SearXNG**: 需要在 `config.json` 中配置实例地址
+- **Google**: 需要配置 API 密钥（推荐使用环境变量/`.env`：`GOOGLE_API_KEY`、`GOOGLE_CSE_ID`；也可放在本地 `config.json`）
+- **SearXNG**: 需要配置实例地址（`config.json` 或 `.env`：`SEARXNG_BASE_URL`）
 - **缓存**: 默认启用，可在代码中配置
+
+> 🔐 安全提示：请勿在仓库中提交真实密钥，详情见 [docs/SECURITY.md](docs/SECURITY.md)。
 
 ```json
 {

@@ -1,0 +1,38 @@
+[
+    {
+        "id": "fastapi_tutorial",
+        "query": "FastAPI tutorial",
+        "k": 10,
+        "language": "en",
+        "theme": "documentation",
+        "intent": "navigational",
+        "expected_urls": [
+            "https://fastapi.tiangolo.com/tutorial/"
+        ],
+        "expected_domains": [
+            "fastapi.tiangolo.com"
+        ],
+        "thresholds": {
+            "min_recall_at_k": 1.0,
+            "min_mrr": 0.2,
+            "min_ndcg": 0.3,
+            "max_drop_mrr": 0.0,
+            "max_drop_ndcg": 0.0
+        },
+        "notes": "优先填 expected_urls；如果 URL 不稳定，可只填 expected_domains。"
+    },
+    {
+        "id": "python_asyncio",
+        "query": "Python asyncio gather vs wait",
+        "k": 10,
+        "language": "en",
+        "theme": "howto",
+        "intent": "informational",
+        "expected_domains": [
+            "docs.python.org"
+        ],
+        "thresholds": {
+            "min_recall_at_k": 1.0
+        }
+    }
+]

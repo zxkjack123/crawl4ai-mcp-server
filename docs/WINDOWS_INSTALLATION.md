@@ -226,7 +226,7 @@ code config.json
 {
     "google": {
         "api_key": "AIzaSy...",
-        "cse_id": "e7250f42e66574df7"
+      "cse_id": "YOUR_GOOGLE_CSE_ID"
     }
 }
 ```

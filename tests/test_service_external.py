@@ -4,18 +4,26 @@ import time
 
 BASE_URL = "http://localhost:18080"
 
-def test_health():
-    print("Testing /health...")
+
+def _health_ok() -> bool:
+    """Best-effort health probe for manual runs.
+
+    pytest will call test_* functions; those should assert and return None.
+    """
     try:
         resp = requests.get(f"{BASE_URL}/health")
         resp.raise_for_status()
-        data = resp.json()
-        print("✅ Health check passed")
-        print(json.dumps(data, indent=2))
         return True
-    except Exception as e:
-        print(f"❌ Health check failed: {e}")
+    except Exception:
         return False
+
+def test_health():
+    print("Testing /health...")
+    resp = requests.get(f"{BASE_URL}/health")
+    resp.raise_for_status()
+    data = resp.json()
+    print("✅ Health check passed")
+    print(json.dumps(data, indent=2))
 
 def test_read_url():
     print("\nTesting /read_url...")
@@ -68,6 +76,8 @@ def test_search():
 
 if __name__ == "__main__":
     print(f"Target: {BASE_URL}")
-    if test_health():
+    if _health_ok():
+        # Re-run with full output
+        test_health()
         test_read_url()
         test_search()

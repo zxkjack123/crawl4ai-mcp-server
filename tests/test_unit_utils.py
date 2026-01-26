@@ -16,6 +16,7 @@ from src.utils import (
     RateLimitConfig,
     MultiRateLimiter,
     rewrite_local_proxy_url,
+    get_http_proxy_from_env,
 )
 
 
@@ -259,6 +260,53 @@ class TestRateLimiter:
         assert result is True
         # 应该有足够的令牌，不需要等待太久
         assert elapsed < 0.5
+
+
+class TestProxyEnvResolution:
+    def test_prefers_crawl4ai_https_proxy(self, monkeypatch):
+        monkeypatch.delenv("CRAWL4AI_HTTP_PROXY", raising=False)
+        monkeypatch.delenv("CRAWL4AI_HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("ALL_PROXY", raising=False)
+        monkeypatch.delenv("all_proxy", raising=False)
+
+        monkeypatch.setenv("CRAWL4AI_HTTPS_PROXY", "http://proxy.example:7890")
+        monkeypatch.setenv("CRAWL4AI_HTTP_PROXY", "http://proxy.example:7891")
+
+        assert get_http_proxy_from_env() == "http://proxy.example:7890"
+
+    def test_accepts_standard_http_proxy(self, monkeypatch):
+        monkeypatch.delenv("CRAWL4AI_HTTP_PROXY", raising=False)
+        monkeypatch.delenv("CRAWL4AI_HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("ALL_PROXY", raising=False)
+        monkeypatch.delenv("all_proxy", raising=False)
+
+        monkeypatch.setenv("HTTP_PROXY", "http://proxy.example:8080")
+        assert get_http_proxy_from_env() == "http://proxy.example:8080"
+
+    def test_rewrites_localhost_when_enabled(self, monkeypatch):
+        monkeypatch.delenv("CRAWL4AI_HTTP_PROXY", raising=False)
+        monkeypatch.delenv("CRAWL4AI_HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("ALL_PROXY", raising=False)
+        monkeypatch.delenv("all_proxy", raising=False)
+
+        monkeypatch.setenv("CRAWL4AI_ALLOW_PROXY_REWRITE", "true")
+        monkeypatch.setenv("HOST_PROXY_GATEWAY", "host.docker.internal")
+        monkeypatch.setenv("HOST_PROXY_PORT_OVERRIDE", "7890")
+        monkeypatch.setenv("CRAWL4AI_HTTP_PROXY", "http://127.0.0.1:1234")
+
+        assert get_http_proxy_from_env() == "http://host.docker.internal:7890"
 
 
 class TestMultiRateLimiter:

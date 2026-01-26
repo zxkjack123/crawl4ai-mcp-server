@@ -71,6 +71,9 @@ async def test_read_url_retries_via_proxy_and_succeeds(monkeypatch):
     # Arrange: patch crawler class and proxy resolver
     monkeypatch.setattr(index, "AsyncWebCrawler", FakeAsyncWebCrawler)
     monkeypatch.setattr(index, "_resolve_crawler_proxy_url", lambda: "http://127.0.0.1:7890")
+    # SSRF protection defaults to enabled and may require DNS; allowlist test host.
+    monkeypatch.setenv("CRAWL4AI_READ_URL_SSRF_PROTECTION", "1")
+    monkeypatch.setenv("CRAWL4AI_READ_URL_ALLOWED_HOSTS", "example.com")
 
     # Reset module state
     index.crawler = None
@@ -108,6 +111,9 @@ async def test_read_url_direct_succeeds_no_proxy(monkeypatch):
     monkeypatch.setattr(index, "AsyncWebCrawler", FakeAsyncWebCrawler)
     # Even if resolver returns a proxy, direct should succeed and avoid using it
     monkeypatch.setattr(index, "_resolve_crawler_proxy_url", lambda: "http://127.0.0.1:7890")
+    # SSRF protection defaults to enabled and may require DNS; allowlist test host.
+    monkeypatch.setenv("CRAWL4AI_READ_URL_SSRF_PROTECTION", "1")
+    monkeypatch.setenv("CRAWL4AI_READ_URL_ALLOWED_HOSTS", "example.com")
 
     # Reset state
     index.crawler = None

@@ -126,6 +126,11 @@ curl http://localhost:18080/health | jq
 
 - 当内部出现错误时,HTTP 状态码为 `400`,`detail` 字段包含错误信息(例如: `No search engines available`).
 
+### Request ID（可观测性）
+
+- HTTP Bridge 会在每次请求的响应中返回 `X-Request-Id` 头。
+- 客户端也可以主动传入 `X-Request-Id`（例如 UUID），服务端会原样回传，方便在日志/监控中做端到端关联。
+
 ### 客户端示例
 
 ```bash
@@ -144,6 +149,7 @@ payload = {
 }
 resp = requests.post("http://localhost:18080/search", json=payload, timeout=30)
 resp.raise_for_status()
+print("request_id:", resp.headers.get("X-Request-Id"))
 print(resp.json()["results"])
 ```
 
@@ -182,11 +188,27 @@ print(resp.json()["results"])
 2. **并发限制**
    - 可在上游入口加速率限制(例如 Nginx `limit_req`),或通过 `.env` 中的 `ENABLE_RATE_LIMIT`/`ENABLE_CACHE` 控制桥接层的缓存与限流。
 
-3. **认证 / 网络隔离**
-   - 默认未启用鉴权,推荐在生产环境通过以下方式保护:
+3. **认证 / 网络隔离（强烈建议生产开启）**
+   - HTTP Bridge 现已支持内置 Bearer Token 鉴权（环境变量配置）。
+     - 设置 `CRAWL4AI_HTTP_AUTH_TOKEN` 后,`/search` 与 `/read_url` 将要求:
+       - `Authorization: Bearer <token>`
+     - 可用 `CRAWL4AI_HTTP_AUTH_TOKENS=token1,token2` 配置多个 token 以便滚动/灰度。
+     - `/health` 默认不需要鉴权（方便探活），如需保护可设置 `CRAWL4AI_HTTP_PROTECT_HEALTH=1`。
+   - 仍推荐结合网络隔离:
      - 仅在内网暴露 `18080`
-     - 通过 Nginx / Traefik 添加 Basic Auth / JWT / API Key 校验
-     - 使用云防火墙或安全组限制访问源
+     - 使用云防火墙/安全组限制来源
+     - 或在 Nginx / Traefik 再加一层 JWT / Basic Auth（双层防护）
+
+4. **HTTP 层限流 / 请求保护**
+   - 建议在 Bridge 层启用限流，避免被误用/刷爆:
+     - `CRAWL4AI_HTTP_RATE_LIMIT_RPS=5`
+     - `CRAWL4AI_HTTP_RATE_LIMIT_BURST=10`
+   - 也可在上游入口（Nginx `limit_req` 等）做更强的分布式限流。
+
+5. **请求体大小限制 / 超时**
+   - 默认限制请求体 1MiB，可通过 `CRAWL4AI_HTTP_MAX_BODY_BYTES` 调整。
+   - 默认单请求超时 60 秒，可通过 `CRAWL4AI_HTTP_REQUEST_TIMEOUT_S` 调整。
+   - 对 `read_url` 等可能较慢的请求,建议客户端也设置合理超时与重试策略。
 
 4. **日志与监控**
    - 容器日志位于 `logs/` 挂载目录,可配合 ELK/ Loki 收集。

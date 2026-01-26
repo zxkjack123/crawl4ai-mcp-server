@@ -154,12 +154,17 @@ class SearchCache:
             f"(size={len(self._cache)}/{self.max_size})"
         )
 
-    def clear(self) -> None:
-        """清空所有缓存"""
+    def clear(self) -> int:
+        """清空所有缓存
+
+        Returns:
+            删除的条目数
+        """
         size = len(self._cache)
         self._cache.clear()
         self._access_order.clear()
         logger.info(f"Cache cleared: {size} entries removed")
+        return size
 
     def remove_expired(self) -> int:
         """
@@ -191,7 +196,7 @@ class SearchCache:
             缓存统计字典
         """
         total_hits = sum(entry.hits for entry in self._cache.values())
-        avg_age = 0
+        avg_age = 0.0
         if self._cache:
             current_time = time.time()
             avg_age = sum(
@@ -200,12 +205,21 @@ class SearchCache:
             ) / len(self._cache)
 
         return {
+            "type": "memory",
             "size": len(self._cache),
             "max_size": self.max_size,
             "total_hits": total_hits,
             "ttl": self.ttl,
             "avg_age_seconds": int(avg_age)
         }
+
+    # Backward/forward-compatible aliases (manage_cache expects these names)
+    def export_to_json(self, filepath: str) -> int:
+        self.export_to_file(filepath)
+        return len(self._cache)
+
+    def import_from_json(self, filepath: str) -> int:
+        return self.import_from_file(filepath)
 
     def export_to_file(self, filepath: str) -> None:
         """

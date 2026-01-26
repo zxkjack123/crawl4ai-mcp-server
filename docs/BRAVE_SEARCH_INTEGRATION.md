@@ -76,7 +76,7 @@ results = await search_manager.search("Python programming", engine="auto")
 ```json
 {
     "brave": {
-        "api_key": "BSApoZO3VglXHsQjRaHW1GFMJ6ZtXOM"
+        "api_key": "YOUR_BRAVE_API_KEY"
     },
     "google": {
         "api_key": "YOUR_GOOGLE_API_KEY",

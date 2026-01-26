@@ -1,0 +1,451 @@
+[
+    {
+        "id": "nav_zh_iter_tritium_fuel_cycle",
+        "query": "ITER 氚燃料循环 官方",
+        "k": 5,
+        "language": "zh",
+        "theme": "tritium_fuel_cycle",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iter.org",
+            "fusionforenergy.europa.eu",
+            "f4e.europa.eu"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.25,
+            "min_ndcg": 0.45
+        },
+        "notes": "你更看重官方文档命中：导航型查询建议 k=5 且阈值更严格。"
+    },
+    {
+        "id": "nav_en_iter_tritium_fuel_cycle",
+        "query": "ITER tritium fuel cycle",
+        "k": 5,
+        "language": "en",
+        "theme": "tritium_fuel_cycle",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iter.org",
+            "fusionforenergy.europa.eu",
+            "f4e.europa.eu"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.25,
+            "min_ndcg": 0.45
+        }
+    },
+    {
+        "id": "nav_en_iaea_fec_fusion",
+        "query": "IAEA Fusion Energy Conference FEC",
+        "k": 5,
+        "language": "en",
+        "theme": "fusion_organizations",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iaea.org"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.25
+        }
+    },
+    {
+        "id": "nav_zh_eurofusion_neutronics",
+        "query": "EUROfusion 聚变 中子学 neutronics",
+        "k": 5,
+        "language": "zh",
+        "theme": "fusion_organizations",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "euro-fusion.org"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.2
+        }
+    },
+    {
+        "id": "doc_en_iaea_radiation_protection",
+        "query": "IAEA radiation protection safety standards",
+        "k": 10,
+        "language": "en",
+        "theme": "radiation_safety",
+        "difficulty": "medium",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iaea.org",
+            "icrp.org",
+            "unscear.org",
+            "oecd-nea.org",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.15,
+            "min_ndcg": 0.25
+        },
+        "notes": "辐射防护：官方国际组织（IAEA/ICRP/UNSCEAR）命中是主要目标。"
+    },
+    {
+        "id": "doc_zh_fusion_radiation_safety",
+        "query": "聚变 核与辐射安全 官方 指南",
+        "k": 10,
+        "language": "zh",
+        "theme": "fusion_radiation_safety",
+        "difficulty": "hard",
+        "intent": "informational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iaea.org",
+            "oecd-nea.org",
+            "unscear.org",
+            "iter.org",
+            "f4e.europa.eu",
+            "fusionforenergy.europa.eu",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.1,
+            "min_ndcg": 0.2
+        }
+    },
+    {
+        "id": "doc_en_fusion_neutronics",
+        "query": "fusion neutronics shielding blanket activation",
+        "k": 10,
+        "language": "en",
+        "theme": "fusion_neutronics",
+        "difficulty": "hard",
+        "intent": "informational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iaea.org",
+            "iter.org",
+            "euro-fusion.org",
+            "pppl.gov",
+            "ipp.mpg.de",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.1,
+            "min_ndcg": 0.2
+        },
+        "notes": "中子学/屏蔽/活化属于长尾组合意图：更适合 domain 集合 + 温和阈值。"
+    },
+    {
+        "id": "doc_zh_fusion_neutronics",
+        "query": "聚变中子学 屏蔽 组件 活化 评估",
+        "k": 10,
+        "language": "zh",
+        "theme": "fusion_neutronics",
+        "difficulty": "hard",
+        "intent": "informational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iaea.org",
+            "iter.org",
+            "euro-fusion.org",
+            "pppl.gov",
+            "ipp.mpg.de",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.1,
+            "min_ndcg": 0.15
+        }
+    },
+    {
+        "id": "code_en_mcnp_official",
+        "query": "MCNP official site",
+        "k": 5,
+        "language": "en",
+        "theme": "monte_carlo_codes",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "mcnp.lanl.gov",
+            "www.lanl.gov",
+            "lanl.gov"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.2
+        }
+    },
+    {
+        "id": "code_en_openmc_official",
+        "query": "OpenMC Monte Carlo code official",
+        "k": 5,
+        "language": "en",
+        "theme": "monte_carlo_codes",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "openmc.org",
+            "github.com",
+            "mit.edu"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.15
+        },
+        "notes": "OpenMC 官方域名稳定；GitHub/学校站点作为补充。"
+    },
+    {
+        "id": "code_en_geant4_official",
+        "query": "Geant4 official website",
+        "k": 5,
+        "language": "en",
+        "theme": "monte_carlo_codes",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "static",
+        "expected_domains": [
+            "geant4.web.cern.ch",
+            "home.cern",
+            "cern.ch"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.2
+        }
+    },
+    {
+        "id": "code_en_fluka_official",
+        "query": "FLUKA code official website",
+        "k": 5,
+        "language": "en",
+        "theme": "monte_carlo_codes",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "static",
+        "expected_domains": [
+            "fluka.org"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_mrr": 0.2
+        }
+    },
+    {
+        "id": "doc_en_activation_fispact",
+        "query": "FISPACT activation code official",
+        "k": 10,
+        "language": "en",
+        "theme": "activation",
+        "difficulty": "medium",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "ukaea.uk",
+            "ccfe.ukaea.uk",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.15
+        }
+    },
+    {
+        "id": "doc_en_fendl_iaea",
+        "query": "FENDL fusion evaluated nuclear data library",
+        "k": 10,
+        "language": "en",
+        "theme": "nuclear_data",
+        "difficulty": "medium",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iaea.org",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.2
+        }
+    },
+    {
+        "id": "org_en_oecd_nea_radiation",
+        "query": "OECD NEA radiation protection",
+        "k": 10,
+        "language": "en",
+        "theme": "radiation_safety",
+        "difficulty": "easy",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "oecd-nea.org",
+            "nea.fr",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.2
+        }
+    },
+    {
+        "id": "lab_en_pppl_tritium",
+        "query": "PPPL tritium fuel cycle",
+        "k": 10,
+        "language": "en",
+        "theme": "tritium_fuel_cycle",
+        "difficulty": "medium",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "pppl.gov"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.15
+        }
+    },
+    {
+        "id": "lab_en_psfc_mit_fusion",
+        "query": "MIT PSFC fusion neutronics",
+        "k": 10,
+        "language": "en",
+        "theme": "fusion_neutronics",
+        "difficulty": "medium",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "psfc.mit.edu",
+            "mit.edu"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.15
+        }
+    },
+    {
+        "id": "org_en_ans_fusion_neutronics",
+        "query": "ANS fusion neutronics",
+        "k": 10,
+        "language": "en",
+        "theme": "fusion_organizations",
+        "difficulty": "medium",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "ans.org",
+            "iaea.org",
+            "iter.org",
+            "oecd-nea.org",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com",
+            "sciencedirect.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.1
+        },
+        "notes": "ANS/SOFT/ISFNT 这类会议官网可能每届更换域名；把学会/组织入口 + 出版商入口都算作可接受命中更稳。"
+    },
+    {
+        "id": "conf_en_soft_symposium",
+        "query": "SOFT Symposium on Fusion Technology proceedings",
+        "k": 10,
+        "language": "en",
+        "theme": "fusion_conferences",
+        "difficulty": "hard",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "euro-fusion.org",
+            "iter.org",
+            "iaea.org",
+            "sciencedirect.com",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.1
+        }
+    },
+    {
+        "id": "conf_en_isfnt_symposium",
+        "query": "ISFNT International Symposium on Fusion Nuclear Technology proceedings",
+        "k": 10,
+        "language": "en",
+        "theme": "fusion_conferences",
+        "difficulty": "hard",
+        "intent": "navigational",
+        "freshness": "semi-static",
+        "expected_domains": [
+            "iter.org",
+            "iaea.org",
+            "oecd-nea.org",
+            "sciencedirect.com",
+            "iopscience.iop.org",
+            "aip.scitation.org",
+            "link.springer.com",
+            "onlinelibrary.wiley.com"
+        ],
+        "thresholds": {
+            "min_hit_at_k": 1.0,
+            "min_recall_at_k": 0.2,
+            "min_mrr": 0.1
+        }
+    }
+]

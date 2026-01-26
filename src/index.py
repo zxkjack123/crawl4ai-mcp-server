@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 
 import asyncio
+import ipaddress
 import json
 import time
 import psutil
 import os
+import httpx
+import socket
+from typing import Any, Dict, List
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 from mcp.server.fastmcp import FastMCP
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
@@ -16,10 +21,10 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 # Use relative import or direct import depending on context
 try:
     from .search import SearchManager
-    from .utils import rewrite_local_proxy_url
+    from .utils import rewrite_local_proxy_url, get_http_proxy_from_env
 except ImportError:
     from search import SearchManager
-    from utils import rewrite_local_proxy_url
+    from utils import rewrite_local_proxy_url, get_http_proxy_from_env
 
 mcp = FastMCP("Crawl4AI")
 
@@ -63,12 +68,18 @@ def _extract_proxy_from_cfg(cfg: dict) -> str | None:
     if not proxy_cfg:
         return None
 
+    proxy_value: str | None
     if isinstance(proxy_cfg, str):
         proxy_value = proxy_cfg
     elif isinstance(proxy_cfg, dict):
         https_p = proxy_cfg.get("https")
         http_p = proxy_cfg.get("http")
-        proxy_value = https_p or http_p
+        if isinstance(https_p, str) and https_p:
+            proxy_value = https_p
+        elif isinstance(http_p, str) and http_p:
+            proxy_value = http_p
+        else:
+            proxy_value = None
     else:
         proxy_value = None
 
@@ -80,14 +91,7 @@ def _extract_proxy_from_cfg(cfg: dict) -> str | None:
 
 def _env_proxy_http_https() -> str | None:
     """Return http/https proxy from env if available (http/https only)."""
-    https_proxy = (
-        os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
-    )
-    http_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
-    for p in (https_proxy, http_proxy):
-        if p and (p.startswith("http://") or p.startswith("https://")):
-            return rewrite_local_proxy_url(p)
-    return None
+    return get_http_proxy_from_env()
 
 
 def _resolve_crawler_proxy_url() -> str | None:
@@ -115,6 +119,260 @@ def _resolve_crawler_proxy_url() -> str | None:
         )
     # Lastly, try env
     return _env_proxy_http_https()
+
+
+def _parse_bool_env(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    v = str(value).strip().lower()
+    if v in {"1", "true", "yes", "y", "on"}:
+        return True
+    if v in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _parse_int_env(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return None
+
+
+def _parse_float_env(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(str(value).strip())
+    except Exception:
+        return None
+
+
+def _read_url_security_enabled() -> bool:
+    # Default: enabled (safe baseline)
+    v = _parse_bool_env(os.environ.get("CRAWL4AI_READ_URL_SSRF_PROTECTION"))
+    return True if v is None else bool(v)
+
+
+def _read_url_allow_private() -> bool:
+    # Default: block private/loopback
+    v = _parse_bool_env(os.environ.get("CRAWL4AI_READ_URL_ALLOW_PRIVATE"))
+    return False if v is None else bool(v)
+
+
+def _read_url_allowed_hosts() -> set[str]:
+    raw = (os.environ.get("CRAWL4AI_READ_URL_ALLOWED_HOSTS") or "").strip()
+    if not raw:
+        return set()
+    return {h.strip().lower() for h in raw.split(",") if h.strip()}
+
+
+def _read_url_max_url_length() -> int:
+    v = _parse_int_env(os.environ.get("CRAWL4AI_READ_URL_MAX_URL_LENGTH"))
+    if v is None:
+        return 4096
+    return max(256, v)
+
+
+def _read_url_preflight_enabled() -> bool:
+    # Default: disabled to avoid extra network calls / false negatives.
+    v = _parse_bool_env(os.environ.get("CRAWL4AI_READ_URL_PREFLIGHT"))
+    return False if v is None else bool(v)
+
+
+def _read_url_preflight_timeout_s() -> float:
+    v = _parse_float_env(os.environ.get("CRAWL4AI_READ_URL_PREFLIGHT_TIMEOUT_S"))
+    if v is None:
+        return 5.0
+    return max(0.5, v)
+
+
+def _read_url_max_redirects() -> int:
+    v = _parse_int_env(os.environ.get("CRAWL4AI_READ_URL_MAX_REDIRECTS"))
+    if v is None:
+        return 5
+    return max(0, v)
+
+
+def _read_url_preflight_max_bytes() -> int:
+    v = _parse_int_env(os.environ.get("CRAWL4AI_READ_URL_PREFLIGHT_MAX_BYTES"))
+    if v is None:
+        return 2 * 1024 * 1024
+    return max(0, v)
+
+
+def _read_url_allowed_content_type_prefixes() -> tuple[str, ...]:
+    raw = (os.environ.get("CRAWL4AI_READ_URL_ALLOWED_CONTENT_TYPES") or "").strip()
+    if not raw:
+        return (
+            "text/html",
+            "application/xhtml+xml",
+            "text/plain",
+            "application/json",
+        )
+    parts = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    return tuple(parts)
+
+
+def _is_public_ip(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except Exception:
+        return False
+    # is_global excludes private/loopback/link-local/multicast/reserved/unspecified.
+    return bool(getattr(addr, "is_global", False))
+
+
+def _hostname_is_ip_literal(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_host_ips(host: str) -> set[str]:
+    ips: set[str] = set()
+    # getaddrinfo may return multiple families/records
+    for fam, _typ, _proto, _canon, sockaddr in socket.getaddrinfo(host, None):
+        try:
+            if fam == socket.AF_INET:
+                ips.add(str(sockaddr[0]))
+            elif fam == socket.AF_INET6:
+                ips.add(str(sockaddr[0]))
+        except Exception:
+            continue
+    return ips
+
+
+async def _validate_read_url_target(url: str) -> str | None:
+    """Validate a user-provided URL to reduce SSRF risk.
+
+    Returns an error message string if blocked, otherwise None.
+    """
+    if not _read_url_security_enabled():
+        return None
+
+    raw = str(url or "").strip()
+    if not raw:
+        return "URL is required"
+    if len(raw) > _read_url_max_url_length():
+        return "URL is too long"
+
+    try:
+        parts = urlsplit(raw)
+    except Exception:
+        return "Invalid URL"
+
+    scheme = (parts.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        return "Only http/https URLs are allowed"
+
+    # Block credentials in URL (userinfo), common SSRF trick.
+    if parts.username or parts.password:
+        return "URL must not contain credentials"
+
+    host = (parts.hostname or "").strip()
+    if not host:
+        return "URL host is missing"
+
+    host_l = host.lower()
+    allowed_hosts = _read_url_allowed_hosts()
+    allow_private = _read_url_allow_private()
+
+    if host_l in allowed_hosts:
+        return None
+
+    # Fast-path for obvious localhost names.
+    if not allow_private:
+        if host_l in {"localhost", "localhost.localdomain"}:
+            return "Blocked localhost URL"
+        if host_l.endswith(".localhost"):
+            return "Blocked localhost URL"
+
+    # Validate resolved IPs.
+    if _hostname_is_ip_literal(host_l):
+        if allow_private:
+            return None
+        if not _is_public_ip(host_l):
+            return "Blocked non-public IP address"
+        return None
+
+    try:
+        ips = await asyncio.to_thread(_resolve_host_ips, host)
+    except Exception:
+        return "Failed to resolve hostname"
+
+    if not ips:
+        return "Hostname did not resolve"
+
+    if not allow_private:
+        for ip in ips:
+            if not _is_public_ip(ip):
+                return "Blocked non-public IP address"
+
+    return None
+
+
+async def _preflight_url(url: str, *, proxy_url: str | None) -> tuple[str | None, str | None]:
+    """Optional preflight to enforce redirect/content-type/size caps.
+
+    Returns (final_url, error). If error is not None, caller should fail.
+    """
+    max_redirects = _read_url_max_redirects()
+    max_bytes = _read_url_preflight_max_bytes()
+    timeout_s = _read_url_preflight_timeout_s()
+    allowed_ct = _read_url_allowed_content_type_prefixes()
+
+    async with httpx.AsyncClient(
+        timeout=timeout_s,
+        follow_redirects=True,
+        max_redirects=max_redirects,
+        trust_env=False,
+        proxy=proxy_url,
+        headers={"User-Agent": "Crawl4AI-Preflight/0.6.0", "Accept": "text/html,*/*"},
+    ) as client:
+        try:
+            async with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                final_url = str(resp.url)
+
+                # Re-validate the final URL (redirect target) for SSRF safety.
+                err = await _validate_read_url_target(final_url)
+                if err:
+                    return None, f"Redirect target blocked: {err}"
+
+                ctype = (resp.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+                if ctype:
+                    if not any(ctype.startswith(p) for p in allowed_ct):
+                        return None, f"Blocked content-type: {ctype}"
+
+                if max_bytes > 0:
+                    # Fast reject using Content-Length if available.
+                    clen = (resp.headers.get("content-length") or "").strip()
+                    if clen:
+                        try:
+                            if int(clen) > max_bytes:
+                                return None, "Response is too large"
+                        except Exception:
+                            pass
+                    read = 0
+                    async for chunk in resp.aiter_bytes():
+                        read += len(chunk)
+                        if read > max_bytes:
+                            return None, "Response is too large"
+
+                return final_url, None
+        except httpx.TooManyRedirects:
+            return None, "Too many redirects"
+        except httpx.HTTPStatusError as e:
+            return None, f"Preflight HTTP error: {e.response.status_code}"
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            return None, f"Preflight request failed: {e.__class__.__name__}"
+        except Exception as e:
+            return None, f"Preflight failed: {str(e)}"
 
 
 async def initialize_crawler():
@@ -171,11 +429,32 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
             - markdown: The default markdown format
     """
     global crawler_proxy_url
+
+    # SSRF protection (fail fast before initializing browser/crawler).
+    err = await _validate_read_url_target(url)
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    # Optional preflight checks (redirect/content-type/size caps).
+    if _read_url_preflight_enabled():
+        # Try direct first; then try configured proxy (if any) on failure.
+        final_url, pre_err = await _preflight_url(url, proxy_url=None)
+        if pre_err:
+            resolved_proxy = _resolve_crawler_proxy_url()
+            if resolved_proxy:
+                final_url, pre_err = await _preflight_url(url, proxy_url=resolved_proxy)
+        if pre_err:
+            return json.dumps({"error": pre_err}, ensure_ascii=False)
+        if final_url:
+            url = final_url
+
     await initialize_crawler()
-    
+
     if crawler is None:
-         return json.dumps({"error": "Failed to initialize crawler"}, ensure_ascii=False)
-    
+        return json.dumps(
+            {"error": "Failed to initialize crawler"}, ensure_ascii=False
+        )
+
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
         word_count_threshold=10,
@@ -212,7 +491,8 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
             # If both are missing, raise error
             raise ValueError(
                 "Crawler result missing markdown data (checked 'markdown_v2' and 'markdown'). "
-                "Ensure the Crawl4AI markdown generator is enabled and the target responded with HTML."
+                "Ensure the Crawl4AI markdown generator is enabled and the "
+                "target responded with HTML."
             )
 
         if format == "raw_markdown":
@@ -230,7 +510,7 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
 
     async def _run_with(cwlr):
         if cwlr is None:
-             raise ValueError("Crawler instance is not initialized")
+            raise ValueError("Crawler instance is not initialized")
         res = await cwlr.arun(url=url, config=run_config)
         content = _extract_content(res)
         # ensure UTF-8 string
@@ -323,7 +603,6 @@ async def search(
             )
             
         results = await search_manager.search(query, num_results, engine)
-        print(f"Search results: {results}")  # 添加调试日志
         
         # 确保JSON字符串是UTF-8编码的
         try:
@@ -428,12 +707,191 @@ async def system_status(check_type: str = "health") -> str:
             }
             
             all_passed = all(c["status"] == "pass" for c in checks.values())
-            
+
+            diagnostics: Dict[str, Any] = {}
+            warnings: List[str] = []
             readiness_data = {
                 "ready": all_passed,
                 "checks": checks,
-                "timestamp": time.time()
+                "diagnostics": diagnostics,
+                "warnings": warnings,
+                "timestamp": time.time(),
             }
+
+            # -----------------------------
+            # Extra diagnostics (non-blocking)
+            # -----------------------------
+            try:
+                in_docker = Path("/.dockerenv").exists() or (
+                    os.environ.get("RUNNING_IN_DOCKER", "").strip().lower()
+                    in {"1", "true", "yes"}
+                )
+                proxy_rewrite_enabled = (
+                    os.environ.get("CRAWL4AI_ALLOW_PROXY_REWRITE", "0")
+                    .strip().lower() in {"1", "true", "yes"}
+                )
+                env_proxy = get_http_proxy_from_env()
+
+                def _redact_proxy(value: str | None) -> str | None:
+                    if not value:
+                        return None
+                    try:
+                        # Strip userinfo if present: scheme://user:pass@host:port
+                        from urllib.parse import urlsplit, urlunsplit
+
+                        parts = urlsplit(value)
+                        netloc = parts.hostname or ""
+                        if parts.port:
+                            netloc = f"{netloc}:{parts.port}"
+                        return urlunsplit((parts.scheme, netloc, "", "", ""))
+                    except Exception:
+                        return "<redacted>"
+
+                diagnostics.update({
+                    "runtime": {
+                        "in_docker": in_docker,
+                        "proxy_rewrite_enabled": proxy_rewrite_enabled,
+                    },
+                    "proxy": {
+                        "env_proxy_configured": bool(env_proxy),
+                        "env_proxy": _redact_proxy(env_proxy),
+                    },
+                })
+
+                # Engine-level snapshots (best-effort)
+                engine_diag = {}
+                ddg_impl = None
+                searxng_ping = None
+
+                if search_manager:
+                    engines_all = list(search_manager.engines) + list(
+                        getattr(search_manager, "fallback_engines", [])
+                    )
+                    for e in engines_all:
+                        name = type(e).__name__
+                        e_type = name.lower()
+                        proxy_val = getattr(e, "proxy", None)
+                        engine_diag[name] = {
+                            "proxy_configured": bool(proxy_val),
+                            "proxy": (
+                                _redact_proxy(proxy_val)
+                                if isinstance(proxy_val, str)
+                                else None
+                            ),
+                        }
+                        # detect DDGS implementation
+                        if "duckduckgo" in e_type and hasattr(e, "ddgs"):
+                            try:
+                                ddg_impl = getattr(e.ddgs.__class__, "__module__", None)
+                                engine_diag[name]["ddgs_impl"] = ddg_impl
+                                engine_diag[name]["region"] = getattr(e, "region", None)
+                            except Exception:
+                                pass
+                        if "searxng" in e_type:
+                            engine_diag[name]["base_url"] = getattr(e, "base_url", None)
+                            engine_diag[name]["language"] = getattr(e, "language", None)
+
+                diagnostics["engines"] = engine_diag
+
+                # Warn about common docker localhost pitfalls
+                if in_docker:
+                    # Localhost proxy inside container is usually wrong unless rewrite is enabled
+                    if not proxy_rewrite_enabled:
+                        # Check typical proxy env vars too
+                        for k in (
+                            "CRAWL4AI_HTTP_PROXY",
+                            "CRAWL4AI_HTTPS_PROXY",
+                            "HTTP_PROXY",
+                            "HTTPS_PROXY",
+                        ):
+                            v = os.environ.get(k)
+                            if v and ("127.0.0.1" in v or "localhost" in v):
+                                warnings.append(
+                                    f"{k} points to localhost inside a container; "
+                                    "enable CRAWL4AI_ALLOW_PROXY_REWRITE=true "
+                                    "or use host.docker.internal"
+                                )
+                                break
+
+                    # If SearXNG is configured as localhost, it's usually wrong in compose
+                    for _, ed in engine_diag.items():
+                        base_url = ed.get("base_url")
+                        if isinstance(base_url, str) and (
+                            "localhost" in base_url
+                            or "127.0.0.1" in base_url
+                        ):
+                            warnings.append(
+                                "SearXNG base_url points to localhost inside container; "
+                                "in docker-compose it should typically be http://searxng:8080 "
+                                "(or set SEARXNG_BASE_URL)"
+                            )
+                            break
+
+                # Warn if we're on the legacy duckduckgo_search package
+                if ddg_impl and "duckduckgo_search" in ddg_impl:
+                    warnings.append(
+                        "DuckDuckGo backend is using legacy 'duckduckgo_search' "
+                        "package; installing 'ddgs' improves stability and backend selection"
+                    )
+
+                # Report cache settings (cache can preserve degraded results)
+                try:
+                    if search_manager and getattr(search_manager, "cache", None):
+                        cache_obj = search_manager.cache
+                        cache_type = None
+                        cache_db_path = None
+                        try:
+                            stats = (
+                                cache_obj.get_stats()
+                                if hasattr(cache_obj, "get_stats")
+                                else None
+                            )
+                            if isinstance(stats, dict):
+                                cache_type = stats.get("type")
+                                cache_db_path = stats.get("db_path")
+                        except Exception:
+                            cache_type = None
+                        diagnostics["cache"] = {
+                            "enabled": True,
+                            "ttl_seconds": getattr(cache_obj, "ttl", None),
+                            "type": cache_type,
+                            "db_path": cache_db_path,
+                        }
+                    else:
+                        diagnostics["cache"] = {"enabled": False}
+                except Exception:
+                    pass
+
+                # Best-effort ping for SearXNG (only checks local reachability, not internet)
+                try:
+                    searxng_base = None
+                    searxng_lang = None
+                    for _, ed in engine_diag.items():
+                        if ed.get("base_url"):
+                            searxng_base = ed.get("base_url")
+                            searxng_lang = ed.get("language") or "auto"
+                            break
+                    if searxng_base:
+                        url = str(searxng_base).rstrip("/") + "/search"
+                        async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
+                            r = await client.get(url, params={
+                                "q": "test",
+                                "format": "json",
+                                "language": searxng_lang,
+                                "pageno": "1",
+                            })
+                            r.raise_for_status()
+                            _ = r.json()
+                        searxng_ping = {"ok": True}
+                    if searxng_ping is not None:
+                        diagnostics["searxng_ping"] = searxng_ping
+                except Exception as e:
+                    diagnostics["searxng_ping"] = {
+                        "ok": False,
+                        "error": str(e),
+                    }
+            except Exception as e:
+                diagnostics["diagnostics_error"] = str(e)
             
             if check_type == "readiness":
                 return json.dumps(readiness_data, ensure_ascii=False, indent=2)
@@ -675,9 +1133,7 @@ async def export_search_results(
             actual_engine = results[0].get("engine", engine)
         
         # 准备导出数据
-        export_data = {
-            "results": results
-        }
+        export_data: Dict[str, Any] = {"results": results}
         
         # 添加元数据
         if include_metadata:
@@ -729,7 +1185,12 @@ async def export_search_results(
 
 
 async def cleanup():
-    await close_crawler()
+    global search_manager
+    try:
+        if search_manager and hasattr(search_manager, "aclose"):
+            await search_manager.aclose()
+    finally:
+        await close_crawler()
 
 if __name__ == "__main__":
     try:

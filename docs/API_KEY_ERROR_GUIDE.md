@@ -74,7 +74,7 @@ gcloud alpha services api-keys create \
 
 您的 Search Engine ID 是正确的：
 ```
-CSE ID: e7250f42e66574df7
+CSE ID: YOUR_GOOGLE_CSE_ID
 ```
 
 这个 ID 来自 Programmable Search Engine 控制台，格式正确。
@@ -98,7 +98,7 @@ nano config.json
 {
   "google": {
     "api_key": "AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "cse_id": "e7250f42e66574df7"
+      "cse_id": "YOUR_GOOGLE_CSE_ID"
   }
 }
 ```
