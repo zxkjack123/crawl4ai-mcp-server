@@ -59,3 +59,25 @@ def test_rrf_engine_weights_can_downweight_an_engine():
     assert len(fused) == 2
     # With ddg weight=0, ranking is purely from google list.
     assert fused[0]["link"].rstrip("/") == "https://example.com/a"
+
+
+def test_rrf_domain_boost_can_promote_official_site():
+    # Without a domain boost, rank=1 usually beats rank=2 for k=0.
+    # With an official-domain multiplier, an official link can be promoted.
+    all_results = {
+        "google": [
+            {"title": "Unofficial", "link": "https://example.com/x", "snippet": "", "engine": "google"},
+            {"title": "ITER", "link": "https://www.iter.org/", "snippet": "", "engine": "google"},
+        ]
+    }
+
+    fused = merge_and_deduplicate(
+        all_results,
+        num_results=2,
+        fusion_method="rrf",
+        rrf_k=0,
+        canonicalize_links=True,
+        domain_boosts={"iter.org": 2.2},
+    )
+
+    assert fused[0]["link"].rstrip("/") == "https://www.iter.org"

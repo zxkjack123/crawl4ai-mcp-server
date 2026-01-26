@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -146,6 +147,97 @@ def canonicalize_url(url: Optional[str]) -> Optional[str]:
     return urlunsplit((scheme, netloc, path, query, fragment))
 
 
+def _normalize_host(host: Optional[str]) -> Optional[str]:
+    if not host:
+        return None
+    h = host.strip().lower().rstrip(".")
+    if h.startswith("www."):
+        h = h[4:]
+    return h or None
+
+
+def _host_from_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        parsed = urlsplit(str(url))
+        return _normalize_host(parsed.hostname)
+    except Exception:
+        return None
+
+
+def _parse_domain_boosts_from_env() -> Dict[str, float]:
+    """Parse domain boost mapping from env.
+
+    Supported formats:
+    - JSON: {"iter.org": 1.35, "iaea.org": 1.25}
+    - CSV:  iter.org=1.35,iaea.org=1.25
+    """
+
+    raw = (
+        (os.environ.get("CRAWL4AI_DOMAIN_BOOSTS") or "").strip()
+        or (os.environ.get("CRAWL4AI_OFFICIAL_DOMAIN_BOOSTS") or "").strip()
+    )
+    if not raw:
+        return {}
+
+    out: Dict[str, float] = {}
+    try:
+        if raw.lstrip().startswith("{"):
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                for k, v in parsed.items():
+                    dom = _normalize_host(str(k))
+                    if not dom:
+                        continue
+                    try:
+                        out[dom] = float(v)
+                    except Exception:
+                        continue
+                return out
+    except Exception:
+        # Fall through to CSV parsing.
+        pass
+
+    for part in raw.split(","):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        dom = _normalize_host(k)
+        if not dom:
+            continue
+        try:
+            out[dom] = float(v)
+        except Exception:
+            continue
+    return out
+
+
+def _domain_multiplier(host: Optional[str], boosts: Dict[str, float]) -> float:
+    if not host or not boosts:
+        return 1.0
+    h = _normalize_host(host)
+    if not h:
+        return 1.0
+
+    best = 1.0
+    for dom, mult in boosts.items():
+        d = _normalize_host(dom)
+        if not d:
+            continue
+        try:
+            m = float(mult)
+        except Exception:
+            continue
+        if m <= 0:
+            continue
+        if h == d or h.endswith("." + d):
+            if m > best:
+                best = m
+    return best
+
+
 def sort_results(
     results: List[Dict[str, Any]],
     engine_priority: Optional[Dict[str, int]] = None
@@ -197,6 +289,7 @@ def merge_and_deduplicate(
     rrf_k: int = 60,
     engine_weights: Optional[Dict[str, float]] = None,
     canonicalize_links: bool = True,
+    domain_boosts: Optional[Dict[str, float]] = None,
 ) -> List[Dict[str, Any]]:
     """
     合并多个引擎的结果，去重并排序
@@ -223,6 +316,7 @@ def merge_and_deduplicate(
     if method in {"rrf", "reciprocal_rank_fusion"}:
         # Reciprocal Rank Fusion across engines.
         weights = engine_weights or {}
+        boosts = domain_boosts if domain_boosts is not None else _parse_domain_boosts_from_env()
         scores: Dict[str, float] = {}
         best: Dict[str, tuple[int, int, Dict[str, Any]]] = {}
         first_seen = 0
@@ -248,7 +342,9 @@ def merge_and_deduplicate(
                 denom = float(max(0, int(rrf_k)) + rank)
                 if denom <= 0:
                     denom = float(rank)
-                scores[key] = scores.get(key, 0.0) + (w / denom)
+                host = _host_from_url(link)
+                dm = _domain_multiplier(host, boosts)
+                scores[key] = scores.get(key, 0.0) + ((w * dm) / denom)
 
                 # Representative selection (prefer higher engine priority)
                 eng = str(result.get("engine", engine)).lower()
