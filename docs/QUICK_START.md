@@ -20,9 +20,8 @@ cd /home/gw/opt/crawl4ai-mcp-server
 # Activate virtual environment
 source .venv/bin/activate
 
-# Run the server
-cd src
-python index.py
+# Run the server (MCP stdio)
+./scripts/run_mcp_with_env.sh
 ```
 
 The server should start without errors. Press `Ctrl+C` to stop it when ready.
@@ -46,7 +45,7 @@ The server should start without errors. Press `Ctrl+C` to stop it when ready.
 ```
 
 ### Key Files
-- **Server Entry Point**: `src/index.py`
+- **Server Entry Point**: `src/index.py` (recommended launcher: `scripts/run_mcp_with_env.sh`)
 - **Search Module**: `src/search.py`
 - **Configuration**: `config.json`
 - **Dependencies**: `requirements.txt`
@@ -131,8 +130,8 @@ If you want to use Google search instead of (or in addition to) DuckDuckGo:
     "mcp": {
       "servers": {
         "crawl4ai": {
-          "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-          "args": ["/home/gw/opt/crawl4ai-mcp-server/src/index.py"]
+          "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+          "args": []
         }
       }
     }
@@ -151,8 +150,8 @@ If you want to use Google search instead of (or in addition to) DuckDuckGo:
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": ["/home/gw/opt/crawl4ai-mcp-server/src/index.py"]
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": []
     }
   }
 }
@@ -174,8 +173,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": ["/home/gw/opt/crawl4ai-mcp-server/src/index.py"]
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": []
     }
   }
 }
@@ -189,7 +188,7 @@ Before integration, verify:
 - [ ] Python version 3.9+: `python --version`
 - [ ] Dependencies installed: `pip list | grep crawl4ai`
 - [ ] Playwright installed: `playwright --version`
-- [ ] Server starts without errors: `python src/index.py`
+- [ ] Server starts without errors: `./scripts/run_mcp_with_env.sh`
 - [ ] Config file exists: `ls -la config.json`
 
 ## 🐛 Common Issues
@@ -200,7 +199,7 @@ Before integration, verify:
 ```bash
 cd /home/gw/opt/crawl4ai-mcp-server
 source .venv/bin/activate
-python src/index.py
+./scripts/run_mcp_with_env.sh
 ```
 
 Look for error messages about missing dependencies or configuration issues.
@@ -226,7 +225,7 @@ playwright install chromium
 **Solution:**
 ```bash
 chmod +x .venv/bin/python
-chmod +x src/index.py
+chmod +x scripts/run_mcp_with_env.sh
 ```
 
 ## 📚 Usage Examples

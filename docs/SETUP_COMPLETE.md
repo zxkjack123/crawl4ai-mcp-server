@@ -31,8 +31,7 @@
 ```bash
 cd /home/gw/opt/crawl4ai-mcp-server
 source .venv/bin/activate
-cd src
-python index.py
+./scripts/run_mcp_with_env.sh
 ```
 
 ### Activate Virtual Environment
@@ -52,13 +51,8 @@ Add to your VS Code `settings.json`:
     "mcp": {
       "servers": {
         "crawl4ai": {
-          "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-          "args": [
-            "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-          ],
-          "env": {
-            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
-          }
+          "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+          "args": []
         }
       }
     }
@@ -76,13 +70,8 @@ Create/edit `~/.config/cherry-studio/mcp_servers.json`:
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": [
-        "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-      ],
-      "env": {
-        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
-      }
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": []
     }
   }
 }
@@ -175,8 +164,7 @@ By default, the server uses DuckDuckGo (no API key needed). To add Google search
 ```bash
 cd /home/gw/opt/crawl4ai-mcp-server
 source .venv/bin/activate
-cd src
-python index.py
+./scripts/run_mcp_with_env.sh
 # Should start without errors (press Ctrl+C to stop)
 ```
 
@@ -198,7 +186,7 @@ playwright --version
 ```bash
 cd /home/gw/opt/crawl4ai-mcp-server
 source .venv/bin/activate
-python src/index.py
+./scripts/run_mcp_with_env.sh
 # Check error messages
 ```
 

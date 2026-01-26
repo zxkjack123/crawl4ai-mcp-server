@@ -70,7 +70,7 @@ curl http://localhost:18080/health | jq
 ```json
 {
   "status": "healthy",
-  "version": "0.5.10",
+  "version": "0.6.1",
   "components": {
     "crawler": {"status": "initialized", "ready": true},
     "search": {
@@ -87,6 +87,19 @@ curl http://localhost:18080/health | jq
 - `GET /health` 会聚合 `health/readiness/metrics` 三类信息,适合用作容器探针或上游依赖检查。
 
 ## 5. 搜索 API (`POST /search`)
+
+### 可选：相关性调参（RRF/引擎权重/官方站加权）
+
+Bridge 会读取 `.env` 中的融合配置来影响排序（对 `/search` 与 MCP `search` 均生效）：
+
+- `CRAWL4AI_FUSION_METHOD=rrf`
+- `CRAWL4AI_RRF_ENGINE_WEIGHTS`：按引擎对 RRF 分数加权（JSON 或 CSV）。
+- `CRAWL4AI_DOMAIN_BOOSTS`：按域名对 RRF 分数乘以倍率（支持精确 host 与 suffix 匹配，`www.` 会被归一化）。
+
+示例：
+
+- `CRAWL4AI_RRF_ENGINE_WEIGHTS='{"searxng": 1.2, "brave": 1.1, "duckduckgo": 1.0}'`
+- `CRAWL4AI_DOMAIN_BOOSTS='{"iter.org": 1.35, "iaea.org": 1.25}'`
 
 ### 请求体
 

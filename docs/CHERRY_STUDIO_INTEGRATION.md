@@ -30,12 +30,10 @@ Look for an option to add a new MCP server. You'll need to provide:
 {
   "name": "Crawl4AI",
   "type": "stdio",
-  "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-  "args": [
-    "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-  ],
+  "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+  "args": [],
   "env": {
-    "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
+    "SEARXNG_LANGUAGE": "zh-CN"
   }
 }
 ```
@@ -77,12 +75,10 @@ Add the following configuration:
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": [
-        "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-      ],
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": [],
       "env": {
-        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
+        "SEARXNG_LANGUAGE": "zh-CN"
       }
     }
   }
@@ -118,8 +114,7 @@ If Cherry Studio provides a CLI for managing extensions:
 ```bash
 cherry-studio mcp add \
   --name crawl4ai \
-  --command /home/gw/opt/crawl4ai-mcp-server/.venv/bin/python \
-  --args /home/gw/opt/crawl4ai-mcp-server/src/index.py
+  --command /home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh
 ```
 
 ## Verification
@@ -209,12 +204,9 @@ Create a custom configuration file for search preferences:
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": [
-        "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-      ],
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": [],
       "env": {
-        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
         "DEFAULT_SEARCH_ENGINE": "duckduckgo",
         "DEFAULT_NUM_RESULTS": "10"
       }
@@ -261,13 +253,11 @@ For slow connections or large websites:
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": [
-        "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-      ],
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": [],
       "timeout": 60000,
       "env": {
-        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
+        "SEARXNG_LANGUAGE": "zh-CN"
       }
     }
   }
@@ -294,9 +284,7 @@ For slow connections or large websites:
 ```bash
 # Run the server directly to see errors
 cd /home/gw/opt/crawl4ai-mcp-server
-source .venv/bin/activate
-cd src
-python index.py
+./scripts/run_mcp_with_env.sh
 ```
 
 3. **Check Logs:**
@@ -365,7 +353,7 @@ Use `fit_markdown` format instead of `markdown_with_citations` for faster proces
 chmod +x /home/gw/opt/crawl4ai-mcp-server/.venv/bin/python
 
 # Fix script permissions
-chmod +x /home/gw/opt/crawl4ai-mcp-server/src/index.py
+chmod +x /home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh
 
 # Verify ownership
 ls -la /home/gw/opt/crawl4ai-mcp-server/

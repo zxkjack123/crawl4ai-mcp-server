@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.6.1] - 2026-01-26
+
+### Added
+- **Domain Authority Boosting (RRF)**: Optional per-domain score multiplier for the RRF fusion path, configurable via `CRAWL4AI_DOMAIN_BOOSTS` (exact host + suffix match, `www.` normalized).
+- **Request ID Propagation**: End-to-end request-id support (context + logs + HTTP headers) to improve traceability in concurrent workloads.
+- **Engine Circuit Breaker**: Per-engine circuit breaker (CLOSED/OPEN/HALF_OPEN) to reduce cascading failures and improve stability.
+- **Golden Query Evaluation**: Golden-case runner + scoring and baseline compare utilities to track relevance regression over time.
+
+### Changed
+- **Runtime Tuning via .env**: Search timeouts, bulkhead concurrency limits, engine weights, and domain boosts are now configurable via env in both Docker and host MCP workflows.
+- **Host MCP Launch (Linux-friendly)**: Added a wrapper script to source `.env` and run MCP mode reliably even when Docker-only hostnames (e.g. `host.docker.internal`) are present in proxy settings.
+
+### Fixed
+- **Multi-engine Fusion Early-Return**: Improved concurrent early-return behavior for multi-engine search to reduce tail latency while preserving merge quality.
+
 ## [0.6.0] - 2025-12-03
 
 ### Added
@@ -21,9 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Proxy Connection**: Resolved `net::ERR_PROXY_CONNECTION_FAILED` by ensuring the host proxy binds to `0.0.0.0` and the container uses `host.docker.internal`.
 - **Markdown Extraction**: Fixed `AttributeError` when accessing `markdown_v2` on older library versions (now fully upgraded).
-
-## [Unreleased]
-- ✍️ 新增文档 [docs/HTTP_BRIDGE_USAGE.md](docs/HTTP_BRIDGE_USAGE.md), 详细说明如何通过 Docker Stack 将 crawl4ai HTTP Bridge 暴露给其他服务,涵盖端口映射、健康检查、`/search`/`/read_url` API 示范以及上游集成建议。
 
 ## [0.5.10] - 2025-11-26
 

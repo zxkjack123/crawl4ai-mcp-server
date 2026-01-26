@@ -30,14 +30,9 @@ Add the following configuration to your `settings.json`:
     "mcp": {
       "servers": {
         "crawl4ai": {
-          "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-          "args": [
-            "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-          ],
+          "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+          "args": [],
           "env": {
-            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
-            "SERVER_MODE": "mcp",
-            "SEARXNG_BASE_URL": "http://localhost:28981",
             "SEARXNG_LANGUAGE": "zh-CN"
           }
         }
@@ -80,14 +75,9 @@ Add the following content:
 {
   "mcpServers": {
     "crawl4ai": {
-      "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-      "args": [
-        "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-      ],
+      "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+      "args": [],
       "env": {
-        "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
-        "SERVER_MODE": "mcp",
-        "SEARXNG_BASE_URL": "http://localhost:28981",
         "SEARXNG_LANGUAGE": "zh-CN"
       }
     }
@@ -113,14 +103,9 @@ In your project root, create or edit `.vscode/settings.json`:
     "mcp": {
       "servers": {
         "crawl4ai": {
-          "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-          "args": [
-            "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-          ],
+          "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+          "args": [],
           "env": {
-            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
-            "SERVER_MODE": "mcp",
-            "SEARXNG_BASE_URL": "http://localhost:28981",
             "SEARXNG_LANGUAGE": "zh-CN"
           }
         }
@@ -187,13 +172,11 @@ Add timeout settings to your configuration:
     "mcp": {
       "servers": {
         "crawl4ai": {
-          "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-          "args": [
-            "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-          ],
+          "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+          "args": [],
           "timeout": 30000,
           "env": {
-            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src"
+            "SEARXNG_LANGUAGE": "zh-CN"
           }
         }
       }
@@ -212,14 +195,9 @@ If you need to configure API keys or other settings:
     "mcp": {
       "servers": {
         "crawl4ai": {
-          "command": "/home/gw/opt/crawl4ai-mcp-server/.venv/bin/python",
-          "args": [
-            "/home/gw/opt/crawl4ai-mcp-server/src/index.py"
-          ],
+          "command": "/home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh",
+          "args": [],
           "env": {
-            "PYTHONPATH": "/home/gw/opt/crawl4ai-mcp-server/src",
-            "SERVER_MODE": "mcp",
-            "SEARXNG_BASE_URL": "http://localhost:28981",
             "SEARXNG_LANGUAGE": "zh-CN",
             "GOOGLE_API_KEY": "your-api-key",
             "GOOGLE_CSE_ID": "your-cse-id"
@@ -228,15 +206,15 @@ If you need to configure API keys or other settings:
       }
     }
   }
+}
+```
 
 > 💡 **Host vs Docker reminder**
 >
 > - 当你在 **Docker** 中运行 HTTP Bridge 时,容器内部会使用 `SEARXNG_BASE_URL=http://searxng:8080` 访问 SearXNG 服务。
-> - 当你在 **宿主机** 上以 MCP 模式运行 `src/index.py` 并被 VS Code 调用时,建议显式设置
->   `SEARXNG_BASE_URL=http://localhost:28981` 与 `SERVER_MODE=mcp`,这样 `@crawl4ai search` 的行为就能与
+> - 当你在 **宿主机** 上以 MCP 模式运行并被 VS Code 调用时,建议使用 `scripts/run_mcp_with_env.sh` 统一从 `.env`
+>   读取配置(并自动处理 Linux 上 `host.docker.internal` 不可用的问题),这样 `@crawl4ai search` 的行为就能与
 >   Docker HTTP `/search` 完全对齐,避免出现 “HTTP 有结果、MCP 为空数组([])” 的情况。
-}
-```
 
 ## Troubleshooting
 
@@ -252,9 +230,7 @@ If you need to configure API keys or other settings:
 ```bash
 # Run the server manually to see error messages
 cd /home/gw/opt/crawl4ai-mcp-server
-source .venv/bin/activate
-cd src
-python index.py
+./scripts/run_mcp_with_env.sh
 ```
 
 **Solution 3**: Check VS Code Extension Logs
@@ -273,9 +249,11 @@ python index.py
 
 ### Issue: Permission Denied
 
-**Solution**: Make sure the Python executable has execute permissions:
+**Solution**: Make sure the launcher script (and Python) has execute permissions:
 ```bash
-chmod +x /home/gw/opt/crawl4ai-mcp-server/.venv/bin/python
+chmod +x /home/gw/opt/crawl4ai-mcp-server/scripts/run_mcp_with_env.sh
+# Optional:
+# chmod +x /home/gw/opt/crawl4ai-mcp-server/.venv/bin/python
 ```
 
 ### Issue: Module Not Found Errors
