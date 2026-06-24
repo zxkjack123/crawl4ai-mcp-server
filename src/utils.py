@@ -81,6 +81,11 @@ _TRACKING_QUERY_KEYS = {
     "_hsmi",
     "mkt_tok",
     "yclid",
+    # Session IDs
+    "sid",
+    "sessionid",
+    "phpsessid",
+    "jsessionid",
 }
 
 
@@ -112,6 +117,13 @@ def canonicalize_url(url: Optional[str]) -> Optional[str]:
     host = (parts.hostname or "").lower()
     if host.startswith("www."):
         host = host[4:]
+    # Normalize mobile/AMP subdomains to base domain
+    for prefix in ("m.", "amp."):
+        if host.startswith(prefix):
+            stripped = host[len(prefix):]
+            if "." in stripped:
+                host = stripped
+                break
 
     port = parts.port
     if scheme == "https" and port == 443:
@@ -129,7 +141,7 @@ def canonicalize_url(url: Optional[str]) -> Optional[str]:
     if path not in {"", "/"}:
         path = path.rstrip("/")
 
-    # Filter tracking query parameters.
+    # Filter tracking query parameters and sort for consistent ordering.
     query_pairs = parse_qsl(parts.query or "", keep_blank_values=True)
     filtered_pairs: List[tuple[str, str]] = []
     for k, v in query_pairs:
@@ -139,12 +151,93 @@ def canonicalize_url(url: Optional[str]) -> Optional[str]:
         if kl in _TRACKING_QUERY_KEYS:
             continue
         filtered_pairs.append((k, v))
+    filtered_pairs.sort(key=lambda kv: kv[0])
     query = urlencode(filtered_pairs, doseq=True)
 
     # Strip fragment.
     fragment = ""
 
     return urlunsplit((scheme, netloc, path, query, fragment))
+
+
+def _relevance_score(query: str, result: Dict[str, Any]) -> float:
+    """Lightweight token-overlap relevance score for query vs result."""
+    terms = set(query.strip().lower().split())
+    if not terms:
+        return 0.0
+    title = (result.get("title") or "").lower()
+    snippet = (result.get("snippet") or "").lower()
+    score = 0.0
+    for t in terms:
+        if len(t) < 2:
+            continue
+        if t in title:
+            score += 3.0
+        if t in snippet:
+            score += 1.0
+    return score
+
+
+def _blend_relevance(
+    results: List[Dict[str, Any]],
+    scores: Dict[str, float],
+    best: Dict[str, tuple[int, int, Dict[str, Any]]],
+    canonicalize_links: bool,
+    alpha: float = 0.7,
+) -> List[Dict[str, Any]]:
+    """Blend RRF score with query-result relevance score.
+
+    final = alpha * normalised_rrf + (1 - alpha) * normalised_relevance
+    """
+    if not results:
+        return results
+
+    query = ""
+    for r in results:
+        q = r.get("_query")
+        if q:
+            query = q
+            break
+
+    max_rrf = max(scores.values()) if scores else 1.0
+    scored: List[tuple[float, Dict[str, Any]]] = []
+    for r in results:
+        link = r.get("link")
+        key = (
+            canonicalize_url(link) if canonicalize_links
+            else (str(link) if link else "")
+        )
+        rrf = scores.get(key, 0.0) / max_rrf if max_rrf > 0 else 0.0
+        rel = _relevance_score(query, r)
+        max_rel = max(1.0, rel)
+        rel_norm = rel / max_rel
+        final = alpha * rrf + (1.0 - alpha) * rel_norm
+        scored.append((final, r))
+
+    scored.sort(key=lambda x: -x[0])
+    return [r for _, r in scored]
+
+
+def _dedup_by_title(
+    results: List[Dict[str, Any]], threshold: float = 0.85
+) -> List[Dict[str, Any]]:
+    """Remove near-duplicate results by title similarity."""
+    from difflib import SequenceMatcher
+    deduped: List[Dict[str, Any]] = []
+    for r in results:
+        is_dup = False
+        r_title = (r.get("title") or "").lower()
+        for d in deduped:
+            d_title = (d.get("title") or "").lower()
+            if not r_title or not d_title:
+                continue
+            ratio = SequenceMatcher(None, r_title, d_title).ratio()
+            if ratio >= threshold:
+                is_dup = True
+                break
+        if not is_dup:
+            deduped.append(r)
+    return deduped
 
 
 def _normalize_host(host: Optional[str]) -> Optional[str]:
@@ -166,12 +259,26 @@ def _host_from_url(url: Optional[str]) -> Optional[str]:
         return None
 
 
+_DEFAULT_DOMAIN_BOOSTS: Dict[str, float] = {
+    "iter.org": 1.35,
+    "iaea.org": 1.25,
+    "fusionforenergy.europa.eu": 1.25,
+    "euro-fusion.org": 1.2,
+    "pppl.gov": 1.15,
+    "lanl.gov": 1.15,
+    "cern.ch": 1.15,
+    "mit.edu": 1.1,
+}
+
+
 def _parse_domain_boosts_from_env() -> Dict[str, float]:
     """Parse domain boost mapping from env.
 
     Supported formats:
     - JSON: {"iter.org": 1.35, "iaea.org": 1.25}
     - CSV:  iter.org=1.35,iaea.org=1.25
+
+    Returns built-in defaults when env var is not set.
     """
 
     raw = (
@@ -179,7 +286,7 @@ def _parse_domain_boosts_from_env() -> Dict[str, float]:
         or (os.environ.get("CRAWL4AI_OFFICIAL_DOMAIN_BOOSTS") or "").strip()
     )
     if not raw:
-        return {}
+        return _DEFAULT_DOMAIN_BOOSTS
 
     out: Dict[str, float] = {}
     try:
@@ -321,6 +428,14 @@ def merge_and_deduplicate(
         best: Dict[str, tuple[int, int, Dict[str, Any]]] = {}
         first_seen = 0
 
+        # Adaptive k: use smaller k for small result sets to preserve
+        # score differentiation between top and bottom ranks.
+        max_rank = max(
+            (len(results) for results in all_results.values()),
+            default=10,
+        )
+        effective_k = min(int(rrf_k), max(1, max_rank // 2))
+
         for engine, results in all_results.items():
             w = float(weights.get(str(engine).lower(), 1.0))
             if w <= 0:
@@ -339,7 +454,7 @@ def merge_and_deduplicate(
                     # If link is missing, fall back to a weak identifier.
                     key = f"no-link:{engine}:{rank}:{first_seen}"
                 # Score update
-                denom = float(max(0, int(rrf_k)) + rank)
+                denom = float(effective_k + rank)
                 if denom <= 0:
                     denom = float(rank)
                 host = _host_from_url(link)
@@ -371,8 +486,20 @@ def merge_and_deduplicate(
         for k in ranked:
             _pri, _seen, r = best[k]
             final_results.append(r)
-            if len(final_results) >= num_results:
-                break
+
+        # Title-based near-duplicate removal (catches mirror sites,
+        # AMP vs non-AMP, mobile vs desktop URLs that escaped URL dedup).
+        final_results = _dedup_by_title(final_results)
+
+        # Query-result relevance scoring: boost results whose title/snippet
+        # match query terms, blended with RRF score.
+        if final_results:
+            final_results = _blend_relevance(
+                final_results, scores, best, canonicalize_links, alpha=0.7
+            )
+
+        # Trim to requested count.
+        final_results = final_results[:num_results]
 
         logger.info(
             "Merged results via RRF: engines=%s, unique=%s, final=%s",

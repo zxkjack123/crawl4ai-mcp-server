@@ -40,6 +40,7 @@ try:
     from src.monitor import SearchMetrics, get_monitor
     from src.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
     from src.request_context import get_request_id
+    from src.reranker import Reranker, get_reranker
 except Exception:  # pragma: no cover
     from cache import SearchCache
     from persistent_cache import PersistentCache
@@ -54,6 +55,7 @@ except Exception:  # pragma: no cover
     )
     from circuit_breaker import CircuitBreaker, CircuitBreakerConfig
     from request_context import get_request_id
+    from reranker import Reranker, get_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -1045,6 +1047,9 @@ class SearchManager:
         self.enable_monitoring = enable_monitoring
         self.monitor = get_monitor() if enable_monitoring else None
 
+        # Reranker (opt-in via CRAWL4AI_RERANKER env)
+        self.reranker: Reranker = get_reranker()
+
         # Timeout budgets & bulkheads (concurrency limits)
         def _parse_float_env(value: Optional[str]) -> Optional[float]:
             if value is None:
@@ -1512,7 +1517,7 @@ class SearchManager:
         auto_merge_min_engines = 2
         auto_merge_max_engines = 3
         if engine.lower() == "auto":
-            v = os.environ.get("CRAWL4AI_AUTO_MERGE", "0").strip().lower()
+            v = os.environ.get("CRAWL4AI_AUTO_MERGE", "1").strip().lower()
             auto_merge_enabled = v in {"1", "true", "yes", "y", "on"}
             try:
                 auto_merge_min_engines = int(
@@ -1550,7 +1555,6 @@ class SearchManager:
                             for k, v in parsed.items()
                         }
                 else:
-                    # Format: google=1.0,brave=0.8,searxng=0.7,duckduckgo=0.4
                     engine_weights = {}
                     for part in raw_weights.split(","):
                         part = part.strip()
@@ -1560,6 +1564,13 @@ class SearchManager:
                         engine_weights[str(k).strip().lower()] = float(v)
             except Exception:
                 engine_weights = None
+        if engine_weights is None:
+            engine_weights = {
+                "google": 1.0,
+                "brave": 0.9,
+                "searxng": 0.7,
+                "duckduckgo": 0.4,
+            }
         
         # all 模式：使用并发搜索
         if engine.lower() == "all":
@@ -1607,7 +1618,7 @@ class SearchManager:
             auto_merge_concurrent = False
             auto_merge_early_return = True
             if engine.lower() == "auto" and auto_merge_enabled:
-                v = os.environ.get("CRAWL4AI_AUTO_MERGE_CONCURRENT", "0").strip().lower()
+                v = os.environ.get("CRAWL4AI_AUTO_MERGE_CONCURRENT", "1").strip().lower()
                 auto_merge_concurrent = v in {"1", "true", "yes", "y", "on"}
                 v2 = os.environ.get("CRAWL4AI_AUTO_MERGE_EARLY_RETURN", "1").strip().lower()
                 auto_merge_early_return = v2 in {"1", "true", "yes", "y", "on"}
@@ -1786,9 +1797,21 @@ class SearchManager:
                 final_results = all_results[:num_results]
                 all_results = final_results
         
-        # 缓存结果
-        if self.cache and all_results:
-            self.cache.set(query, engine, num_results, all_results)
+        # 缓存结果（包括空结果的负缓存，短TTL）
+        # Apply reranking if configured (after merge, before cache).
+        if self.reranker and all_results and len(all_results) > 1:
+            try:
+                all_results = await self.reranker.rerank(
+                    query, all_results, num_results
+                )
+            except Exception as e:
+                logger.warning("Reranker failed: %s; using unranked results", str(e))
+
+        if self.cache:
+            if all_results:
+                self.cache.set(query, engine, num_results, all_results)
+            else:
+                self.cache.set(query, engine, num_results, [], ttl_override=60)
 
         return all_results, error_msg
 
@@ -1819,6 +1842,7 @@ class SearchManager:
 
         all_engine_results: Dict[str, List[Dict]] = {}
         succeeded = 0
+        _start_time = time.monotonic()
 
         async def _merged_len() -> int:
             if not all_engine_results:
@@ -1860,11 +1884,18 @@ class SearchManager:
                 if succeeded >= max(1, min_engines):
                     try:
                         if await _merged_len() >= num_results:
-                            # Optionally wait a bit for other tasks to finish.
-                            if grace_s > 0 and pending:
+                            # Deadline-aware grace: if we have time budget
+                            # remaining, wait a bit for higher-quality results
+                            # from slower engines before cancelling.
+                            elapsed = time.monotonic() - _start_time
+                            deadline = self.search_deadline_s or 10.0
+                            remaining = max(0.0, deadline - elapsed)
+                            adaptive_grace = min(remaining * 0.3, 1.0)
+                            effective_grace = max(grace_s, adaptive_grace)
+                            if effective_grace > 0 and pending:
                                 done, still = await asyncio.wait(
                                     pending,
-                                    timeout=grace_s,
+                                    timeout=effective_grace,
                                     return_when=asyncio.ALL_COMPLETED,
                                 )
                                 for d in done:
@@ -2059,6 +2090,9 @@ class SearchManager:
 
         breaker = self._circuit_breakers.get(engine_type)
         
+        # Fetch more candidates than requested for better RRF fusion.
+        fetch_count = max(num_results * 2, 20)
+        
         try:
             # Circuit breaker: fail fast when an engine is OPEN.
             if breaker is not None:
@@ -2080,12 +2114,12 @@ class SearchManager:
                 # 执行搜索（自动重试）
                 if timeout_budget is not None:
                     results = await asyncio.wait_for(
-                        self._search_with_retry(search_engine, query, num_results),
+                        self._search_with_retry(search_engine, query, fetch_count),
                         timeout=timeout_budget,
                     )
                 else:
                     results = await self._search_with_retry(
-                        search_engine, query, num_results
+                        search_engine, query, fetch_count
                     )
 
             if breaker is not None:

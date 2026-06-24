@@ -9,12 +9,15 @@ import hashlib
 import time
 import json
 import logging
+import threading
 from typing import List, Dict, Optional
 from pathlib import Path
 from dataclasses import dataclass
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+_local = threading.local()
 
 
 @dataclass
@@ -78,18 +81,27 @@ class PersistentCache:
 
     @contextmanager
     def _get_connection(self):
-        """获取数据库连接（上下文管理器）"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        """获取数据库连接（上下文管理器，thread-local 复用）"""
+        conn = getattr(_local, 'conn', None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            _local.conn = conn
         try:
             yield conn
             conn.commit()
         except Exception as e:
             conn.rollback()
             logger.error(f"Database error: {e}")
+            # Discard broken connection so next call creates a fresh one
+            _local.conn = None
+            try:
+                conn.close()
+            except Exception:
+                pass
             raise
-        finally:
-            conn.close()
 
     def _init_database(self):
         """初始化数据库表结构"""
@@ -138,7 +150,8 @@ class PersistentCache:
         Returns:
             缓存键（MD5哈希）
         """
-        key_str = f"{query}|{engine}|{num_results}"
+        normalized = " ".join(query.strip().lower().split())
+        key_str = f"{normalized}|{engine}|{num_results}"
         return hashlib.md5(key_str.encode()).hexdigest()
 
     def get(
@@ -238,7 +251,8 @@ class PersistentCache:
         query: str,
         engine: str,
         num_results: int,
-        results: List[Dict]
+        results: List[Dict],
+        ttl_override: Optional[int] = None,
     ) -> None:
         """
         存储结果到缓存
@@ -248,6 +262,7 @@ class PersistentCache:
             engine: 搜索引擎
             num_results: 结果数量
             results: 搜索结果
+            ttl_override: 自定义TTL（秒），用于短TTL负缓存
         """
         key = self._generate_key(query, engine, num_results)
         results_json = json.dumps(results, ensure_ascii=False)

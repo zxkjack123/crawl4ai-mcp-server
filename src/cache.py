@@ -67,7 +67,8 @@ class SearchCache:
         Returns:
             缓存键（MD5哈希）
         """
-        key_str = f"{query}|{engine}|{num_results}"
+        normalized = " ".join(query.strip().lower().split())
+        key_str = f"{normalized}|{engine}|{num_results}"
         return hashlib.md5(key_str.encode()).hexdigest()
 
     def get(
@@ -117,7 +118,8 @@ class SearchCache:
         query: str,
         engine: str,
         num_results: int,
-        results: List[Dict]
+        results: List[Dict],
+        ttl_override: Optional[int] = None,
     ) -> None:
         """
         存储结果到缓存
@@ -127,6 +129,7 @@ class SearchCache:
             engine: 搜索引擎
             num_results: 结果数量
             results: 搜索结果
+            ttl_override: 自定义TTL（秒），用于短TTL负缓存
         """
         # 检查缓存大小，如果满了则删除最老的条目（LRU）
         if len(self._cache) >= self.max_size:
@@ -137,6 +140,7 @@ class SearchCache:
                     logger.debug(f"Cache evicted (LRU): {oldest_key}")
 
         key = self._generate_key(query, engine, num_results)
+        effective_ttl = ttl_override if ttl_override is not None else self.ttl
         entry = CacheEntry(
             query=query,
             engine=engine,

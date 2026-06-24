@@ -457,8 +457,8 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
 
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
-        word_count_threshold=10,
-        excluded_tags=["nav", "footer", "header"],
+        word_count_threshold=5,
+        excluded_tags=["nav", "footer", "header", "aside", "script", "style", "noscript", "iframe", "form"],
         markdown_generator=DefaultMarkdownGenerator(
             options={"citations": True}
         )
