@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import time
 from uuid import uuid4
 from dataclasses import dataclass
@@ -16,6 +17,12 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 import importlib
+
+# Python 3.10 compatibility: asyncio.timeout was added in 3.11
+try:  # pragma: no cover
+    from src.compat import *  # noqa: F401,F403  – installs asyncio.timeout on <3.11
+except Exception:  # pragma: no cover
+    from compat import *  # noqa: F401,F403
 
 try:  # pragma: no cover
     from src.request_context import reset_request_id, set_request_id

@@ -9,6 +9,12 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from abc import ABC, abstractmethod
+
+# Python 3.10 compatibility: asyncio.timeout was added in 3.11
+try:  # pragma: no cover
+    from src.compat import *  # noqa: F401,F403
+except Exception:  # pragma: no cover
+    from compat import *  # noqa: F401,F403
 # Prefer the new 'ddgs' package and fall back to the legacy name if needed
 try:
     from ddgs import DDGS  # new package name (no deprecation warning)

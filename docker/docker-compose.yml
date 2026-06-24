@@ -10,7 +10,7 @@ services:
       - ./searxng/proxy-entrypoint.sh:/opt/proxy-entrypoint.sh:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    entrypoint: ["/bin/sh", "/opt/proxy-entrypoint.sh"]
+    entrypoint: [ "/bin/sh", "/opt/proxy-entrypoint.sh" ]
     restart: unless-stopped
 
   crawl4ai-http:
@@ -41,11 +41,11 @@ services:
       - ../reports:/app/reports
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "/app/healthcheck.sh"]
-      interval: 30s
-      timeout: 10s
+      test: [ "CMD", "/app/healthcheck.sh" ]
+      interval: 60s
+      timeout: 30s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -54,6 +54,17 @@ services:
         reservations:
           cpus: "0.5"
           memory: 512M
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: crawl4ai-autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 networks:
   default:

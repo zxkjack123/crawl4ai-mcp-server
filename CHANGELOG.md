@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Python 3.10 Compatibility**: Extracted `asyncio.timeout` polyfill into `src/compat.py`, imported uniformly by both `rest_server.py` and `search.py`. Previously `search.py` used `asyncio.timeout` without polyfill protection, causing `AttributeError` on Python 3.10.
+- **Healthcheck Shell Integration Tests**: Added `tests/test_healthcheck.sh` with mock HTTP server (`tests/mock_http_server.py`) covering healthy server, `/health` down, `/read_url` error, and `/read_url` empty response scenarios.
+- **Polyfill Unit Tests**: Added `tests/test_compat.py` with 6 tests covering normal completion, timeout firing, handle cleanup, and polyfill-vs-builtin semantic parity.
+- **CI Matrix**: Added `.github/workflows/ci.yml` with Python 3.10/3.11/3.12 matrix, dedicated compat shim verification job, and shell healthcheck test step.
+
+### Changed
+- **Docker Healthcheck**: Deepened `docker/healthcheck.sh` to not only check `/health` liveness but also verify browser/crawl functionality via `/read_url` against `example.com`. Tuned `docker-compose.yml` healthcheck intervals (60s/30s/60s) and added `autoheal` container for automatic restart of unhealthy services.
+- **Dockerfile HEALTHCHECK**: Existing `HEALTHCHECK` directive parameters should be updated to match `docker-compose.yml` (currently still at 30s/10s/40s).
+
 ## [0.6.1] - 2026-01-26
 
 ### Added
