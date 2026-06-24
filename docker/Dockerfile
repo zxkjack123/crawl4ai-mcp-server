@@ -48,7 +48,7 @@ USER appuser
 EXPOSE 8080
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=3 \
     CMD ["/app/healthcheck.sh"]
 
 # 入口命令
