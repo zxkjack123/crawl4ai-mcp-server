@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-24
+
 ### Added
 - **Python 3.10 Compatibility**: Extracted `asyncio.timeout` polyfill into `src/compat.py`, imported uniformly by both `rest_server.py` and `search.py`. Previously `search.py` used `asyncio.timeout` without polyfill protection, causing `AttributeError` on Python 3.10.
 - **Healthcheck Shell Integration Tests**: Added `tests/test_healthcheck.sh` with mock HTTP server (`tests/mock_http_server.py`) covering healthy server, `/health` down, `/read_url` error, and `/read_url` empty response scenarios.
