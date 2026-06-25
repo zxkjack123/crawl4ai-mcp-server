@@ -41,6 +41,7 @@ try:
     from src.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
     from src.request_context import get_request_id
     from src.reranker import Reranker, get_reranker
+    from src.fusion_terms import FusionTermsProvider, get_fusion_terms_provider
 except Exception:  # pragma: no cover
     from cache import SearchCache
     from persistent_cache import PersistentCache
@@ -56,6 +57,7 @@ except Exception:  # pragma: no cover
     from circuit_breaker import CircuitBreaker, CircuitBreakerConfig
     from request_context import get_request_id
     from reranker import Reranker, get_reranker
+    from fusion_terms import FusionTermsProvider, get_fusion_terms_provider
 
 logger = logging.getLogger(__name__)
 
@@ -936,6 +938,66 @@ class SearXNGSearch(SearchEngine):
             )
 
 
+def _apply_fusion_relevance(
+    results: List[Dict],
+    query: str,
+    provider,
+) -> List[Dict]:
+    """Enhance relevance scores using fusion terminology knowledge.
+
+    Boosts results whose title/snippet contain known fusion domain terms
+    by multiplying their effective rank weight.  Also uses query-concept
+    expansion to give extra weight to results that match concept aliases
+    of the query terms.
+    """
+    if not results:
+        return results
+
+    # Get query-concept expansions for smarter matching.
+    expanded_terms = provider.expand_query_terms(query)
+    known_terms = provider.get_known_terms()
+
+    if not known_terms:
+        return results
+
+    scored: List[tuple[float, int, Dict]] = []
+    for idx, r in enumerate(results):
+        title = (r.get("title") or "").lower()
+        snippet = (r.get("snippet") or "").lower()
+        combined = f"{title} {snippet}"
+
+        # Base score: keep original position weight.
+        base = 1.0 / (idx + 1)
+
+        # Boost for containing query-expanded terms (concept aliases).
+        concept_hits = 0
+        for term in expanded_terms:
+            term_lower = term.lower()
+            if len(term_lower) >= 3 and term_lower in combined:
+                concept_hits += 1
+
+        # Boost for containing any known fusion terms.
+        fusion_hits = 0
+        for term in known_terms:
+            if len(term) >= 3 and term.lower() in combined:
+                fusion_hits += 1
+                if fusion_hits >= 20:
+                    break
+
+        # Compute boost factor.
+        boost = 1.0
+        if concept_hits > 0:
+            boost = min(2.0, 1.0 + concept_hits * 0.15)
+        if fusion_hits > 0:
+            # Additional boost for broad fusion terminology coverage.
+            boost = max(boost, min(2.0, 1.0 + fusion_hits * 0.02))
+
+        scored.append((base * boost, idx, r))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [r for _, _, r in scored]
+
+
 class SearchManager:
     def __init__(
         self,
@@ -1049,6 +1111,11 @@ class SearchManager:
 
         # Reranker (opt-in via CRAWL4AI_RERANKER env)
         self.reranker: Reranker = get_reranker()
+
+        # Fusion terminology provider (opt-in via FUSION_TERMS_ARTIFACTS_DIR)
+        self.fusion_terms: FusionTermsProvider = get_fusion_terms_provider()
+        if self.fusion_terms.enabled:
+            logger.info("Fusion terms provider enabled")
 
         # Timeout budgets & bulkheads (concurrency limits)
         def _parse_float_env(value: Optional[str]) -> Optional[float]:
@@ -1445,6 +1512,13 @@ class SearchManager:
         """
         error_msg = None
 
+        # Fusion terminology: normalize query (forbidden→preferred corrections)
+        if self.fusion_terms.enabled:
+            normalized = self.fusion_terms.normalize_query(query)
+            if normalized != query:
+                logger.debug("Fusion-terms query normalized: %r → %r", query, normalized)
+                query = normalized
+
         all_results: List[Dict] = []
 
         if not self.engines and not self.fallback_engines:
@@ -1806,6 +1880,15 @@ class SearchManager:
                 )
             except Exception as e:
                 logger.warning("Reranker failed: %s; using unranked results", str(e))
+
+        # Fusion terminology: boost results containing known fusion terms.
+        if self.fusion_terms.enabled and all_results:
+            try:
+                all_results = _apply_fusion_relevance(
+                    all_results, query, self.fusion_terms
+                )
+            except Exception as e:
+                logger.debug("Fusion relevance boost failed: %s", str(e))
 
         if self.cache:
             if all_results:
