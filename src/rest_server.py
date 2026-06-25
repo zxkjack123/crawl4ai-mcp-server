@@ -34,7 +34,7 @@ try:  # pragma: no cover - attempt absolute import when package context is avail
 except ModuleNotFoundError:  # pragma: no cover - fallback for direct execution
     index = importlib.import_module("index")
 
-app = FastAPI(title="Crawl4AI HTTP Bridge", version="0.7.0")
+app = FastAPI(title="Crawl4AI HTTP Bridge", version="0.8.0")
 
 logger = logging.getLogger(__name__)
 

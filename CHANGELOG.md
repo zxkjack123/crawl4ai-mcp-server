@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-25
+
+### Added
+- **14 Search Retrieval Improvements**:
+  - Default engine weights for RRF (google=1.0, brave=0.9, searxng=0.7, ddg=0.4) — prevents low-quality engines from diluting results
+  - Concurrent auto-merge enabled by default — P99 latency from sum-of-failures to max-of-concurrent
+  - Negative caching — empty results cached with 60s TTL, stops repeated upstream calls for failing queries
+  - Query normalization for cache keys — strip/lowercase/collapse whitespace so equivalent queries share cache entries
+  - Adaptive RRF k — uses k = max_rank//2 for small result sets, preserving score differentiation
+  - Default domain boosts — pre-configured fusion/nuclear authority sites (iter.org, iaea.org, etc.)
+  - Post-merge relevance scoring — blends token-overlap score with RRF (alpha=0.7)
+  - Fetch 2x candidates per engine — gives RRF a larger fusion pool before trimming
+  - Title-based near-duplicate removal — catches mirror sites, AMP vs non-AMP URLs
+  - URL canonicalization improvements — sort query params, strip session IDs, normalize mobile/AMP subdomains
+  - SQLite connection reuse — thread-local persistent connection with WAL mode
+  - read_url content cleaning — lowered word_count_threshold to 5, excluded more noise tags
+  - Pluggable reranker — `src/reranker.py` with NoopReranker, TokenReranker, CrossEncoderReranker; env `CRAWL4AI_RERANKER`
+  - Deadline-aware early return — uses 30% of remaining time budget as adaptive grace period
+- **Fusion Terms Integration** (`src/fusion_terms.py`): Reads fusion-terms static data artifacts for domain retrieval quality:
+  - Query normalization: forbidden→preferred term corrections (e.g. `Tokamak`→`tokamak`, `ELM碰撞侵蚀`→`ELM诱发侵蚀`)
+  - Query expansion: abbreviation→full name + zh↔en translation for relevance scoring
+  - Term-aware relevance boost: results containing known fusion terms get up to 2.0x position-weighted boost
+  - Facility domain boosts from known fusion facilities
+  - Configured via `FUSION_TERMS_ARTIFACTS_DIR` env var; no-op when unset
+- **Tests**: 16 FusionTermsProvider unit tests, 2 import path fixes, 3 test deadline adjustments for deadline-aware early return
+
+### Changed
+- **Dockerfile HEALTHCHECK**: Parameters aligned with docker-compose.yml (30s/10s/40s → 60s/30s/60s)
+- **Dependencies**: Upper bounds added to all 15 deps in `requirements.txt` and `pyproject.toml`; `pyproject.toml` synced with full runtime+dev deps; `requires-python` bumped to `>=3.10`
+- **Version**: Unified to single source (pyproject.toml, index.py ×4, rest_server.py) at 0.7.0, now 0.8.0
+
+### Fixed
+- **Documentation**:
+  - Deleted stale `docs/README.md` (v2025.02 duplicate)
+  - Rewrote `docs/PROJ_INFO_4AI.md` with current v0.8.0 engines, versions, module layout
+  - Fixed `docs/DEPLOYMENT_GUIDE.md`: Python 3.9→3.10, `config_demo.json`→`config.example.json`, added Brave/SearXNG
+  - Fixed `README.md`: Python version 3.9→3.10
+  - Added `FUSION_TERMS_ARTIFACTS_DIR` to `.env.example`
+  - Updated `smithery.yaml`: all keys now optional, added Brave/SearXNG
+  - Moved 11 historical docs to `docs/archive/`
+
 ## [0.7.0] - 2026-06-24
 
 ### Added

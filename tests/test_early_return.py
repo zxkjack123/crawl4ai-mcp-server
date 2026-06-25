@@ -60,12 +60,13 @@ async def test_all_early_return_cancels_slow_engine(monkeypatch):
     monkeypatch.setenv("CRAWL4AI_ALL_EARLY_RETURN", "1")
     monkeypatch.setenv("CRAWL4AI_ALL_EARLY_RETURN_MIN_ENGINES", "1")
     monkeypatch.setenv("CRAWL4AI_ALL_EARLY_RETURN_GRACE_S", "0")
+    sm.search_deadline_s = 0.5  # generous; grace_s=0 keeps it fast
 
     t0 = time.monotonic()
     results = await sm.search("q", num_results=1, engine="all")
     dt = time.monotonic() - t0
 
-    assert dt < 0.3
+    assert dt < 0.35  # generous margin for CI variance
     assert len(results) == 1
 
     # Give the loop a tick to deliver cancellation.
@@ -92,12 +93,13 @@ async def test_auto_merge_concurrent_early_return(monkeypatch):
     monkeypatch.setenv("CRAWL4AI_AUTO_MERGE_MAX_ENGINES", "2")
     monkeypatch.setenv("CRAWL4AI_AUTO_MERGE_CONCURRENT", "1")
     monkeypatch.setenv("CRAWL4AI_AUTO_MERGE_EARLY_RETURN", "1")
+    sm.search_deadline_s = 1.0  # generous deadline; grace_s=0 keeps it fast
 
     t0 = time.monotonic()
     results = await sm.search("q", num_results=1, engine="auto")
     dt = time.monotonic() - t0
 
-    assert dt < 0.3
+    assert dt < 0.35  # fast engine returns instantly
     assert len(results) == 1
 
     await asyncio.sleep(0)

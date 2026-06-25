@@ -2,8 +2,12 @@
 """Unit tests for per-engine circuit breaker."""
 
 import asyncio
+import os
+import sys
 
 import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 

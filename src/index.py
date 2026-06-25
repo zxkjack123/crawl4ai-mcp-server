@@ -332,7 +332,7 @@ async def _preflight_url(url: str, *, proxy_url: str | None) -> tuple[str | None
         max_redirects=max_redirects,
         trust_env=False,
         proxy=proxy_url,
-        headers={"User-Agent": "Crawl4AI-Preflight/0.7.0", "Accept": "text/html,*/*"},
+        headers={"User-Agent": "Crawl4AI-Preflight/0.8.0", "Accept": "text/html,*/*"},
     ) as client:
         try:
             async with client.stream("GET", url) as resp:
@@ -662,7 +662,7 @@ async def system_status(check_type: str = "health") -> str:
             
             health_data = {
                 "status": "healthy",
-                "version": "0.7.0",
+                "version": "0.8.0",
                 "uptime_seconds": round(uptime_seconds, 2),
                 "uptime_hours": round(uptime_hours, 2),
                 "components": {
@@ -916,7 +916,7 @@ async def system_status(check_type: str = "health") -> str:
             metrics_data = {
                 "service": {
                     "uptime_seconds": round(uptime_seconds, 2),
-                    "version": "0.7.0"
+                    "version": "0.8.0"
                 },
                 "system": {
                     "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -1145,7 +1145,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.7.0"
+                "version": "0.8.0"
             }
         
         # 确保输出目录存在
