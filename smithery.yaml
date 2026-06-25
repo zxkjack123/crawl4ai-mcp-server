@@ -5,17 +5,29 @@ startCommand:
   configSchema:
     # JSON Schema defining the configuration options for the MCP.
     type: object
-    required:
-      - googleApiKey
-      - googleCseId
+    required: []
     properties:
       googleApiKey:
         type: string
-        description: The API key for Google Custom Search Engine.
+        description: (Optional) Google Custom Search Engine API key.
       googleCseId:
         type: string
-        description: The Custom Search Engine ID for Google search.
+        description: (Optional) Google Custom Search Engine ID.
+      braveApiKey:
+        type: string
+        description: (Optional) Brave Search API key (2000 queries/month free).
+      searxngBaseUrl:
+        type: string
+        description: (Optional) SearXNG instance URL (e.g. http://localhost:28981).
   commandFunction:
-    # A function that produces the CLI command to start the MCP on stdio.
     |-
-    (config) => ({ command: 'python', args: ['src/index.py'], env: { GOOGLE_API_KEY: config.googleApiKey, GOOGLE_CSE_ID: config.googleCseId } })
+    (config) => ({
+      command: 'python',
+      args: ['src/index.py'],
+      env: {
+        ...(config.googleApiKey && { GOOGLE_API_KEY: config.googleApiKey }),
+        ...(config.googleCseId && { GOOGLE_CSE_ID: config.googleCseId }),
+        ...(config.braveApiKey && { BRAVE_API_KEY: config.braveApiKey }),
+        ...(config.searxngBaseUrl && { SEARXNG_BASE_URL: config.searxngBaseUrl }),
+      },
+    })

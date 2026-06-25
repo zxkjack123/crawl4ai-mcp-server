@@ -69,7 +69,7 @@ crawl4ai-mcp-server/
 
 ### 📦 系统要求
 
-- **Python**: 3.9 或更高版本
+- **Python**: 3.10 或更高版本
 - **操作系统**: Linux, macOS, Windows 10/11
 - **磁盘空间**: 至少 500 MB
 

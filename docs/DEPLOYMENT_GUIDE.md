@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - pip package manager
 - Virtual environment support
 - Playwright (for web crawling)
@@ -42,22 +42,21 @@ playwright install
 ### 3. Configure the Server
 
 ```bash
-# Copy the demo config to create your config file
-cp config_demo.json config.json
+# Copy the example env file and edit with your API keys
+cp .env.example .env
 ```
 
-Edit `config.json` to add your API keys (optional, only if you want to use Google search):
+Supported search engines (DuckDuckGo works without any keys):
 
-```json
-{
-    "google": {
-        "api_key": "your-google-api-key",
-        "cse_id": "your-google-cse-id"
-    }
-}
-```
+| Engine | Required Env Vars | Notes |
+|---|---|---|
+| DuckDuckGo | — | Free, no API key |
+| Google CSE | `GOOGLE_API_KEY`, `GOOGLE_CSE_ID` | 100 queries/day free |
+| Brave | `BRAVE_API_KEY` | 2,000 queries/month free |
+| SearXNG | `SEARXNG_BASE_URL` | Self-hosted, unlimited |
 
-**Note**: Google search is optional. DuckDuckGo search works without any API keys.
+Edit `.env` to add the keys you need.  All keys are optional — the server
+will use whichever engines are configured.
 
 ### 4. Test the Server
 
@@ -161,7 +160,7 @@ playwright --version
 
 ```bash
 # Verify Python version
-python --version  # Should be 3.9+
+python --version  # Should be 3.10+
 
 # Reinstall dependencies
 pip install --force-reinstall -r requirements.txt

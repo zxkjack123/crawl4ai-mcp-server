@@ -1,78 +1,92 @@
-# Crawl4AI MCP Server
+# Crawl4AI MCP Server — AI Context Document (v0.7.0)
 
-这是一个基于MCP (Model Context Protocol)的智能信息获取服务器,为AI助手系统提供强大的搜索能力和面向LLM优化的网页内容理解功能。通过多引擎搜索和智能内容提取,帮助AI系统高效获取和理解互联网信息。
+Multi-engine search + LLM-optimised web crawling MCP server.  Provides
+`search`, `read_url`, `system_status`, `manage_cache`, and
+`export_search_results` tools over MCP stdio or a FastAPI HTTP bridge.
 
-## 文件结构
+## Source Layout
 
-- `src/index.py`: MCP服务器主实现,使用FastMCP提供网页爬取功能
-- `pyproject.toml`: 项目配置和依赖管理
-- `requirements.txt`: 环境依赖列表,基于实际测试的版本
+| File / Dir | Role |
+|---|---|
+| `src/index.py` | FastMCP app — registers 5 tools, orchestrates crawler + search |
+| `src/search.py` | `SearchManager` (2,400+ lines) — multi-engine concurrency, RRF fusion, caching, circuit-breakers, bulkheads, query expansion |
+| `src/rest_server.py` | FastAPI HTTP bridge (`/health`, `/search`, `/read_url`) with auth, rate limiting, request-id tracing |
+| `src/utils.py` | `merge_and_deduplicate`, `canonicalize_url`, RRF scoring, relevance blending, title-based dedup |
+| `src/cache.py` | In-memory LRU search cache |
+| `src/persistent_cache.py` | SQLite persistent cache (WAL, thread-local connection) |
+| `src/circuit_breaker.py` | Per-engine circuit breaker (CLOSED/OPEN/HALF_OPEN) |
+| `src/compat.py` | `asyncio.timeout` polyfill for Python 3.10 |
+| `src/fusion_terms.py` | Fusion/nuclear terminology provider — reads fusion-terms artifacts for query normalisation + relevance boost |
+| `src/reranker.py` | Pluggable reranker (noop/token/cross-encoder) |
+| `src/monitor.py` | Search metrics collector |
+| `src/request_context.py` | Request-id context propagation |
+| `src/retrieval_eval.py` | Golden-case retrieval evaluation |
+| `docker/` | Dockerfile, compose (searxng + crawl4ai-http + autoheal), entrypoint, healthcheck |
+| `tests/` | 70+ tests, 18 test modules |
+| `.env.example` | 316-line config reference — **definitive** source for all env vars |
 
-## 功能说明
+## Tools
 
-服务器提供以下核心工具:
+### `search(query, num_results=10, engine="auto")`
+Multi-engine concurrent search with RRF fusion.
+- **Engines**: DuckDuckGo (free, no key), Google CSE, Brave, SearXNG
+- **engine="auto"**: concurrent auto-merge across top 3 engines (default)
+- **engine="all"**: all available engines, RRF merge
+- **Fusion**: adaptive RRF k, default per-engine weights (google=1.0, brave=0.9, searxng=0.7, ddg=0.4), domain authority boosts, post-merge relevance scoring, title-based dedup
+- **Infra**: negative caching, query-normalised cache keys, circuit breakers, token-bucket rate limiting, bulkhead concurrency, request coalescing, deadline-aware early return
 
-1. `search`: 强大的网络搜索功能
-   - 支持多个搜索引擎:
-     * DuckDuckGo: 无需API密钥,全面处理AbstractText、Results和RelatedTopics
-     * Google: 需要配置API密钥和CSE ID,提供精准搜索结果
-   - 参数说明:
-     * query: 搜索查询字符串
-     * num_results: 返回结果数量(默认10)
-     * engine: 搜索引擎选择(duckduckgo/google)
-   - 特点:
-     * 支持选择特定搜索引擎
-     * 智能结果整合和排序
+### `read_url(url, format="markdown_with_citations")`
+Crawls a URL via headless browser and returns LLM-optimised Markdown.
+- **Formats**: raw_markdown, markdown_with_citations, references_markdown, fit_markdown, fit_html, markdown
+- **Content cleaning**: excludes nav/footer/header/aside/script/style/noscript/iframe/form, `word_count_threshold=5`
+- **Proxy**: direct-first with proxy fallback on network errors
 
-2. `read_url`: 面向LLM优化的网页内容理解工具
-   - 输出格式:
-     * markdown_with_citations: 包含内联引用的Markdown,保持信息溯源
-     * fit_markdown: 经过LLM优化的精简内容,去除冗余信息
-     * raw_markdown: 基础HTML→Markdown转换
-     * references_markdown: 单独的引用/参考文献部分
-     * fit_html: 生成fit_markdown的过滤后HTML
-     * markdown: 默认Markdown格式
-   - 特点:
-     * 智能内容识别和提取
-     * 自动过滤非核心内容
-     * 保持引用完整性
+### `system_status(check_type="health")`
+Health, readiness, and metrics endpoints.
 
-## 环境要求
+### `manage_cache(action="stats")`
+Cache management: stats, clear, export, cleanup, vacuum.
 
-- Python >= 3.9
-- 依赖包版本:
-  - Crawl4AI==0.4.248
-  - playwright==1.50.0
-  - beautifulsoup4==4.13.3
-  - 其他依赖见requirements.txt
+### `export_search_results(query, ...)`
+Export search results to JSON file.
 
-## 注意事项
+## Key Configuration (env vars)
 
-1. 服务器使用专门的Python环境(crawl4ai_env)
-2. 首次使用需要安装playwright浏览器:
-   ```bash
-   playwright install
-   ```
-3. 服务器使用异步操作,确保资源正确清理
-4. LLM内容优化策略:
-   - 智能内容识别: 自动识别并保留文章主体、关键信息段落
-   - 噪音过滤: 自动过滤导航栏、广告、页脚等对理解无帮助的内容
-   - 信息完整性: 保留URL引用,支持信息溯源
-   - 长度优化: 使用最小词数阈值(10)过滤无效片段
-   - 格式优化: 默认输出markdown_with_citations格式,便于LLM理解和引用
+See `.env.example` for the complete reference.  Critical ones:
 
-## 更新历史
+| Variable | Default | Notes |
+|---|---|---|
+| `GOOGLE_API_KEY` / `GOOGLE_CSE_ID` | — | Google CSE (optional) |
+| `BRAVE_API_KEY` | — | Brave Search (optional) |
+| `SEARXNG_BASE_URL` | `http://localhost:28981` | SearXNG instance (optional) |
+| `CRAWL4AI_AUTO_MERGE` | `1` | Enable concurrent auto-merge |
+| `CRAWL4AI_RRF_K` | `60` | RRF k (adaptive at runtime) |
+| `CRAWL4AI_CACHE_BACKEND` | `memory` | `memory` or `persistent` (SQLite) |
+| `CRAWL4AI_RERANKER` | `none` | `none`, `token`, or `cross-encoder` |
+| `FUSION_TERMS_ARTIFACTS_DIR` | — | Path to fusion-terms artifacts for domain retrieval |
 
-- 2025.03.20: 修复Windows系统上的字符编码问题,确保read_url和search方法在不同操作系统上正常工作
-- 2025.02.10: 集成duckduckgo_search库,优化DuckDuckGo搜索实现,支持更多搜索特性
-- 2025.02.08: 优化DuckDuckGo搜索实现,增强结果收集能力
-- 2025.02.07: 重构项目结构,使用FastMCP实现,优化依赖管理
-- 2025.02.07: 优化内容过滤配置,提高token效率并保持URL完整性
+## Environment
 
-## 跨平台兼容性
+- **Python**: >= 3.10
+- **Key deps**: `crawl4ai>=0.7.7,<0.8`, `playwright>=1.56.0,<2.0`, `mcp>=1.12.0,<2.0`, `fastapi>=0.115.0,<1.0`
 
-为确保在不同操作系统上的兼容性,特别是Windows系统,本项目采取了以下措施:
+## Entry Points
 
-1. **编码处理**: 所有文本输出使用UTF-8编码,并使用`errors='replace'`参数处理无法编码的字符
-2. **错误处理**: 增强了异常捕获和处理机制,提供更详细的错误信息
-3. **JSON序列化**: 使用`ensure_ascii=False`确保非ASCII字符正确处理,避免Windows默认编码(通常是cp1252)的限制
+- **MCP server**: `python -m src.index` or `scripts/run_mcp_with_env.sh`
+- **HTTP bridge**: `docker compose up` (port 18080) or `python -m src.rest_server`
+- **Docker**: `make docker-build && make docker-up`
+
+## Testing
+
+```bash
+pytest tests/ -v --tb=short
+# Skip live-engine tests with:
+pytest tests/ -v --tb=short -k "not (search_llm or google_api or concurrent_search or searxng or brave)"
+```
+
+## Version History
+
+- **v0.7.0** (2026-06-24): Python 3.10 compat, deep healthcheck, CI matrix
+- **v0.7.0-dev** (unreleased): 14 search quality improvements, fusion-terms integration
+- **v0.6.1** (2026-01-26): Domain authority boost, request-id, circuit breaker
+- **v0.6.0** (2025-12-03): crawl4ai 0.7.7, playwright 1.56.0, proxy retry
