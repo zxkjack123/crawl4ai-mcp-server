@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-02
+
+### Added
+- **MCP HTTP 常驻服务模式** (`src/index.py`): MCP 服务器默认以 `streamable-http` 传输监听 `0.0.0.0:8011`, 使单个 Crawl4AI 实例可被多个 agent 通过 `http://<host>:8011/mcp` 共享访问 (替代每 agent 一个 stdio 进程)
+  - `FastMCP(..., host="0.0.0.0", port=8011)` + `mcp.run(transport="streamable-http")`
+  - 与 `docs/VSCODE_INTEGRATION.md` 的宿主机直连 MCP 配置兼容; Agent 侧配置为 `"crawl4ai": { "type": "remote", "url": "http://127.0.0.1:8011/mcp" }`
+- **systemd --user 托管参考**: 提供 `~/.config/systemd/user/crawl4ai-mcp.service` 运行方式 (`Restart=on-failure`, `WantedBy=default.target`), 配合 `loginctl enable-linger` 实现开机自启与崩溃自动恢复
+
+### Changed
+- **Version**: `0.8.0` → `0.8.1` (pyproject.toml, index.py ×4, rest_server.py)
+
+### Fixed
+- **部署冲突**: 消除"系统级 `crawl4ai.service` + 用户级 `crawl4ai-mcp.service` 双实例抢占 0.0.0.0:8011"导致的 `[Errno 98] address already in use` 无限 auto-restart 死循环。统一由用户级 systemd 托管唯一实例。
+
 ## [0.8.0] - 2026-06-25
 
 ### Added

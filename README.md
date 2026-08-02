@@ -152,6 +152,64 @@ notepad config.json
 
 > 💡 **无需在 config.json 中硬编码密钥**: 只需将 `BRAVE_API_KEY`、`GOOGLE_API_KEY`、`GOOGLE_CSE_ID` 等写入 `.env`，无论本地运行还是 Docker 容器都会自动读取这些环境变量。`make docker-up` 会自动加载根目录下的 `.env` 文件。
 
+## 🚀 MCP 服务器常驻 HTTP 服务模式（推荐用于多 Agent 共享）
+
+自 `v0.8.1` 起，MCP 服务器默认以 **`streamable-http`** 传输监听 `0.0.0.0:8011`。这样你可以**只启动一个 Crawl4AI 实例**，让多个 agent（Claude / 其他 MCP 客户端）通过同一个 HTTP 端点共享访问，而不是给每个 agent 各起一个 stdio 进程。
+
+```bash
+# 启动 MCP HTTP 服务（后台常驻）
+cd crawl4ai-mcp-server
+.venv/bin/python -u src/index.py
+```
+
+服务监听 `http://0.0.0.0:8011/mcp`。MCP 客户端配置为：
+
+```jsonc
+// 例如 opencode.jsonc 或 Claude 客户端
+"crawl4ai": {
+  "type": "remote",
+  "url": "http://127.0.0.1:8011/mcp",
+  "enabled": true
+}
+```
+
+### 用 systemd --user 托管（开机自启 + 崩溃自动恢复）
+
+创建 `~/.config/systemd/user/crawl4ai-mcp.service`：
+
+```ini
+[Unit]
+Description=Crawl4AI MCP HTTP Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/crawl4ai-mcp-server
+Environment=PYTHONPATH=/path/to/crawl4ai-mcp-server/src
+ExecStart=/path/to/crawl4ai-mcp-server/.venv/bin/python /path/to/crawl4ai-mcp-server/src/index.py
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+启用并验证：
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now crawl4ai-mcp.service
+loginctl enable-linger $USER   # 使未登录也能自启
+systemctl --user status crawl4ai-mcp.service
+```
+
+> ⚠️ **端口冲突提示**: 若另一个实例已占用 `8011`, systemd 会因 `[Errno 98] address already in use` 而 `auto-restart`。请确保**只有一个**实例托管该端口——优先统一用一个用户级 systemd 服务, 并 `systemctl disable --now` 掉其他同名`crawl4ai.service`。
+
 ### 🧪 测试
 
 **Linux/macOS**:
