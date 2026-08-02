@@ -105,7 +105,7 @@ source .venv/bin/activate  # Linux/macOS
 
 # 安装依赖
 pip install -r requirements.txt
-playwright install
+playwright install   # 下载 Chromium 浏览器, read_url 抓取网页必需; 缺失时 search 可用但 read_url 失败
 ```
 
 #### 🎨 通过 Smithery 安装（Claude 桌面客户端）

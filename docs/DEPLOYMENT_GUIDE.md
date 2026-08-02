@@ -144,17 +144,60 @@ docker run -d --name crawl4ai-mcp crawl4ai-mcp-server
 
 ## Troubleshooting
 
-### Playwright Installation Issues
+### Playwright Browser (Chromium) Missing
 
-If you encounter issues with Playwright browser installation:
+`read_url` uses Playwright to launch a headless Chromium browser. If the browser binary
+was never installed (or the install step was skipped), `read_url` fails with:
+
+```
+BrowserType.launch: Executable doesn't exist at /home/gw/.cache/ms-playwright/chromium-1155/chrome-linux/chrome
+```
+
+> ⚠️ **Impact**: Only `read_url` (browser crawling) is affected. `search` (Brave / Google /
+> SearXNG HTTP engines) and the MCP HTTP endpoint keep working — they do **not** need a browser.
+
+Fix — install the Chromium binaries with the project's venv:
 
 ```bash
-# Try installing browsers again
-playwright install chromium  # Install only Chromium if needed
-
-# Check Playwright installation
-playwright --version
+cd crawl4ai-mcp-server
+.venv/bin/python -m playwright install chromium   # installs chromium + headless-shell + ffmpeg
+# Optional: system libs for Chromium (may need sudo)
+.venv/bin/python -m playwright install-deps chromium
 ```
+
+Verify the browsers are present:
+
+```bash
+ls /home/gw/.cache/ms-playwright/   # should show chromium-<build> and chromium_headless_shell-<build>
+.venv/bin/python -m playwright install --dry-run   # shows what's missing
+```
+
+After installing, **restart** the service so the running process picks up the browser path
+(see *Deployment Options → Background Service*).
+
+### Browser Cannot Reach the Internet (Proxy Required)
+
+If `read_url` returns `net::ERR_EMPTY_RESPONSE` while `search` works, the headless browser is
+likely being launched **without** the proxy that this environment needs for outbound internet
+(e.g. a local Clash/mihomo on `127.0.0.1:7890`).
+
+- Symptom: raw `chromium.launch()` succeeds but `page.goto("https://...")` fails with
+  `net::ERR_EMPTY_RESPONSE` / `ERR_CONNECTION_*`.
+- The crawl4ai MCP server **handles this automatically** in most setups via
+  `CRAWL4AI_HTTP_PROXY` / `HTTPS_PROXY` / `CRAWL4AI_ALLOW_PROXY_REWRITE` in `.env` — a fallback
+  crawler is created with the resolved proxy.
+- Manual check (browser with proxy):
+  ```bash
+  .venv/bin/python -c "
+  from playwright.async_api import async_playwright
+  import asyncio
+  async def m():
+      async with async_playwright() as p:
+          b = await p.chromium.launch(headless=True)
+          pg = await (await b.new_context(proxy={'server':'http://127.0.0.1:7890'})).new_page()
+          await pg.goto('https://example.com'); print(await pg.title()); await b.close()
+  asyncio.run(m())"
+  ```
 
 ### Python Environment Issues
 
@@ -166,9 +209,25 @@ python --version  # Should be 3.10+
 pip install --force-reinstall -r requirements.txt
 ```
 
-### Port Conflicts
+### Port Conflicts / Duplicate Instance Holds 8011
 
-If the server fails to start due to port conflicts, check and modify the port in the MCP client configuration.
+If the service repeatedly crashes with `[Errno 98] address already in use` and enters an
+`activating (auto-restart)` loop, another instance is already bound to the configured port:
+
+```bash
+# Find who owns the port
+ss -tlnp | grep 8011        # shows pid; e.g. another crawl4ai.service or python process
+
+# If a duplicate systemd unit exists, stop & disable the redundant one
+sudo systemctl disable --now crawl4ai.service   # e.g. a stale system-level unit fighting the user-level one
+
+# Ensure exactly ONE managed instance owns the port, then restart it
+systemctl --user restart crawl4ai-mcp.service
+```
+
+> **Key**: Prefer a single user-level `systemd --user` unit (`~/.config/systemd/user/crawl4ai-mcp.service`)
+> with `Restart=on-failure` + `loginctl enable-linger` instead of a system-level `crawl4ai.service`,
+> so only one process binds `0.0.0.0:8011` at boot. See README "MCP 服务器常驻 HTTP 服务模式".
 
 ## Security Considerations
 
