@@ -380,15 +380,18 @@ async def initialize_crawler():
     async with crawler_lock:
         if crawler is not None:
             return
-        # Always initialize a direct (no-proxy) crawler first to honor
-        # direct-first policy
-        browser_config = BrowserConfig(headless=True)
+        # Native host: direct Chromium may fail with ERR_EMPTY_RESPONSE (egress
+        # requires the local Clash proxy). Use the configured proxy as the
+        # primary browser when one is available.
+        resolved = crawler_proxy_url or _resolve_crawler_proxy_url()
+        crawler_proxy_url = resolved
+        browser_config = (
+            BrowserConfig(headless=True, proxy=resolved)
+            if resolved
+            else BrowserConfig(headless=True)
+        )
         crawler = AsyncWebCrawler(config=browser_config)
         await crawler.__aenter__()
-        # Resolve proxy URL for possible later fallback use
-        # (lazy init of proxied crawler)
-        if crawler_proxy_url is None:
-            crawler_proxy_url = _resolve_crawler_proxy_url()
 
 
 async def initialize_crawler_proxy():
