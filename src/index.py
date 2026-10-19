@@ -413,6 +413,73 @@ async def close_crawler():
         await crawler_proxy.__aexit__(None, None, None)
 
 
+class _ReadUrlFailure(RuntimeError):
+    """Structured read_url failure (carries status/html hints for classification)."""
+
+    def __init__(self, message, *, status_code=None, html_len=0, error_message=""):
+        super().__init__(message)
+        self.status_code = status_code
+        self.html_len = html_len
+        self.error_message = error_message or ""
+
+
+_TARGET_BLOCK_MARKERS = (
+    "403", "401", "429", "blocked", "access denied", "forbidden",
+    "captcha", "verify you are human", "just a moment", "cloudflare",
+    "sign in", "log in", "login required", "bot detection",
+    "unusual traffic", "enable javascript", "consent",
+)
+_NETWORK_MARKERS = (
+    "err_empty_response", "err_connection", "err_name_not_resolved",
+    "err_timed_out", "timeout", "timed out", "proxy", "ssl",
+    "tls", "econn", "socket", "name or service not known", "dns",
+)
+
+
+def _classify_read_failure(exc: Exception) -> tuple[str, bool, str]:
+    msg = f"{exc} {getattr(exc, 'error_message', '')}".lower()
+    status = getattr(exc, "status_code", None)
+    if status in (401, 403, 407, 429) or any(m in msg for m in _TARGET_BLOCK_MARKERS):
+        return (
+            "BLOCKED_BY_TARGET",
+            False,
+            "target blocks automated access (login/anti-bot); use DeepSeek Fetch or another source",
+        )
+    if any(m in msg for m in _NETWORK_MARKERS):
+        return ("NETWORK_FAIL", True, "network/proxy failure; retry or check the proxy")
+    if status and int(status) >= 500:
+        return ("NETWORK_FAIL", True, "target server error; retry later")
+    if getattr(exc, "html_len", 0) == 0:
+        return ("EMPTY_CONTENT", False, "target returned no HTML/Markdown; use DeepSeek Fetch")
+    return ("UNKNOWN", True, "unexpected crawl error; retry")
+
+
+def _classify_content(text: str) -> str | None:
+    """Detect short login/anti-bot pages that technically 'succeeded'."""
+    if not isinstance(text, str):
+        return None
+    low = text.lower()
+    if len(text.strip()) < 600 and any(m in low for m in _TARGET_BLOCK_MARKERS):
+        return "BLOCKED_BY_TARGET"
+    if len(text.strip()) < 50:
+        return "EMPTY_CONTENT"
+    return None
+
+
+def _read_url_error_json(prefix: str, exc: Exception) -> str:
+    cls, retryable, suggestion = _classify_read_failure(exc)
+    return json.dumps(
+        {
+            "error": f"{prefix}: {str(exc)}",
+            "classification": cls,
+            "retryable": retryable,
+            "status_code": getattr(exc, "status_code", None),
+            "suggestion": suggestion,
+        },
+        ensure_ascii=False,
+    )
+
+
 @mcp.tool()
 async def read_url(url: str, format: str = "markdown_with_citations") -> str:
     """
@@ -515,6 +582,14 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
         if cwlr is None:
             raise ValueError("Crawler instance is not initialized")
         res = await cwlr.arun(url=url, config=run_config)
+        if res is not None and not getattr(res, "success", True):
+            em = str(getattr(res, "error_message", "") or "")
+            raise _ReadUrlFailure(
+                em or "crawl failed",
+                status_code=getattr(res, "status_code", None),
+                html_len=len(getattr(res, "html", "") or ""),
+                error_message=em,
+            )
         content = _extract_content(res)
         # ensure UTF-8 string
         if content is not None:
@@ -544,11 +619,24 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
                         "Error: Could not convert content to string: "
                         f"{str(e)}"
                     )
+        if isinstance(content, str):
+            cls = _classify_content(content)
+            if cls:
+                return json.dumps(
+                    {
+                        "error": "target returned a block/login page",
+                        "classification": cls,
+                        "retryable": False,
+                        "suggestion": "use DeepSeek Fetch or another source",
+                        "content_preview": content[:300],
+                    },
+                    ensure_ascii=False,
+                )
         return content
 
     # 1) Direct attempt (no proxy)
     try:
-        return await _run_with(crawler)
+        return await asyncio.wait_for(_run_with(crawler), timeout=90)
     except Exception as e:
         # 2) Retry via configured/env proxy if available
         msg = str(e)
@@ -567,15 +655,15 @@ async def read_url(url: str, format: str = "markdown_with_citations") -> str:
                     crawler_proxy_url = resolved
             try:
                 await initialize_crawler_proxy()
-                return await _run_with(crawler_proxy)
+                return await asyncio.wait_for(_run_with(crawler_proxy), timeout=90)
             except Exception as e2:
                 error_msg = f"Error crawling URL via proxy: {str(e2)}"
                 print(error_msg)
-                return json.dumps({"error": error_msg}, ensure_ascii=False)
+                return _read_url_error_json("proxy", e2)
         else:
             error_msg = f"Error crawling URL: {msg}"
             print(error_msg)
-            return json.dumps({"error": error_msg}, ensure_ascii=False)
+            return _read_url_error_json("direct", e)
 
 
 @mcp.tool()
