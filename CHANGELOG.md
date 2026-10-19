@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-19
+
+### Added
+- **DeepSeek Search engine** (`src/search.py`): `DeepSeekSearch` calls `POST https://api.deepseek.com/v1/tools/search` with `DEEPSEEK_API_KEY`; registered first in `SearchManager`; supports `engine="deepseek"` and is used by `engine="auto"`.
+- **`read_url` failure classification** (`src/index.py`): `BLOCKED_BY_TARGET` / `NETWORK_FAIL` / `EMPTY_CONTENT` / `UNKNOWN`, with `retryable`, `status_code`, `suggestion`, and `content_preview`; 90 s per-attempt guard.
+- **Native-host proxy support**: proxy-primary `BrowserConfig` for Clash; `DEEPSEEK_PROXY` / `GOOGLE_PROXY` / `BRAVE_PROXY`; `CRAWL4AI_READ_URL_SSRF_PROTECTION=false` for loopback-only service.
+- `tests/test_read_url_classification.py` (7 unit tests).
+
+### Changed
+- **Bind**: MCP HTTP now defaults to `127.0.0.1:8011` (was `0.0.0.0`), loopback-only.
+- **Version**: `0.8.1` → `0.9.0`.
+
+### Fixed
+- Native-host Chromium `net::ERR_EMPTY_RESPONSE` caused by Docker-only `host.docker.internal` proxy; `CRAWL4AI_ALLOW_PROXY_REWRITE` disabled for native.
+- `read_url` no longer loses the underlying crawler error (status/html hints are propagated and classified).
+
 ## [0.8.1] - 2026-08-02
 
 ### Added

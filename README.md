@@ -148,6 +148,29 @@ notepad config.json
 - **SearXNG**：完全免费无限制，需要部署实例
   - 📖 [SearXNG 集成指南](docs/SEARXNG_INTEGRATION.md) - 部署和配置教程
 
+### DeepSeek Search（2026-10-19，默认稳定引擎）
+
+设置 `DEEPSEEK_API_KEY` 即启用。`engine="deepseek"` 显式使用，`engine="auto"` 优先使用；
+不依赖 Brave/Google/SearXNG 可用性。适合需要稳定检索（含被墙站点）的场景。
+
+### read_url 失败分类（2026-10-19）
+
+`read_url` 失败时返回结构化 JSON，便于 agent 决定是否改用 DeepSeek Fetch：
+
+```json
+{"error":"...","classification":"BLOCKED_BY_TARGET|NETWORK_FAIL|EMPTY_CONTENT|UNKNOWN",
+ "retryable":true,"status_code":403,"suggestion":"...","content_preview":"..."}
+```
+
+- `BLOCKED_BY_TARGET`：登录/反爬/403/429/验证码页 → **不要重试**，改用 DeepSeek Fetch 或官方 API。
+- `NETWORK_FAIL`：超时/代理/SSL/DNS → 可重试或检查代理。
+- `EMPTY_CONTENT`：目标无 HTML/Markdown → 改用 DeepSeek Fetch。
+
+### 原生主机（非 Docker）代理与 SSRF
+
+- 代理：在 `.env` 设置 `DEEPSEEK_PROXY` / `GOOGLE_PROXY` / `BRAVE_PROXY=http://127.0.0.1:7890`；`CRAWL4AI_ALLOW_PROXY_REWRITE=false`（避免把 127.0.0.1 重写成 `host.docker.internal`）。
+- SSRF：服务绑定 `127.0.0.1:8011`，本机使用可设 `CRAWL4AI_READ_URL_SSRF_PROTECTION=false` 以允许经代理访问被墙域名（Clash fake-IP/污染 DNS）。
+
 更多配置详情，请参考 📖 [配置说明](examples/CONFIG.md)。
 
 > 💡 **无需在 config.json 中硬编码密钥**: 只需将 `BRAVE_API_KEY`、`GOOGLE_API_KEY`、`GOOGLE_CSE_ID` 等写入 `.env`，无论本地运行还是 Docker 容器都会自动读取这些环境变量。`make docker-up` 会自动加载根目录下的 `.env` 文件。

@@ -332,7 +332,7 @@ async def _preflight_url(url: str, *, proxy_url: str | None) -> tuple[str | None
         max_redirects=max_redirects,
         trust_env=False,
         proxy=proxy_url,
-        headers={"User-Agent": "Crawl4AI-Preflight/0.8.1", "Accept": "text/html,*/*"},
+        headers={"User-Agent": "Crawl4AI-Preflight/0.9.0", "Accept": "text/html,*/*"},
     ) as client:
         try:
             async with client.stream("GET", url) as resp:
@@ -380,18 +380,13 @@ async def initialize_crawler():
     async with crawler_lock:
         if crawler is not None:
             return
-        # Native host: direct Chromium may fail with ERR_EMPTY_RESPONSE (egress
-        # requires the local Clash proxy). Use the configured proxy as the
-        # primary browser when one is available.
-        resolved = crawler_proxy_url or _resolve_crawler_proxy_url()
-        crawler_proxy_url = resolved
-        browser_config = (
-            BrowserConfig(headless=True, proxy=resolved)
-            if resolved
-            else BrowserConfig(headless=True)
-        )
+        # Direct-first: try the no-proxy crawler first; the proxied crawler is
+        # initialized lazily as a fallback when the direct attempt fails.
+        browser_config = BrowserConfig(headless=True)
         crawler = AsyncWebCrawler(config=browser_config)
         await crawler.__aenter__()
+        if crawler_proxy_url is None:
+            crawler_proxy_url = _resolve_crawler_proxy_url()
 
 
 async def initialize_crawler_proxy():
@@ -461,7 +456,7 @@ def _classify_content(text: str) -> str | None:
     low = text.lower()
     if len(text.strip()) < 600 and any(m in low for m in _TARGET_BLOCK_MARKERS):
         return "BLOCKED_BY_TARGET"
-    if len(text.strip()) < 50:
+    if not text.strip():
         return "EMPTY_CONTENT"
     return None
 
@@ -753,7 +748,7 @@ async def system_status(check_type: str = "health") -> str:
             
             health_data = {
                 "status": "healthy",
-                "version": "0.8.1",
+                "version": "0.9.0",
                 "uptime_seconds": round(uptime_seconds, 2),
                 "uptime_hours": round(uptime_hours, 2),
                 "components": {
@@ -1007,7 +1002,7 @@ async def system_status(check_type: str = "health") -> str:
             metrics_data = {
                 "service": {
                     "uptime_seconds": round(uptime_seconds, 2),
-                    "version": "0.8.1"
+                    "version": "0.9.0"
                 },
                 "system": {
                     "cpu_percent": psutil.cpu_percent(interval=0.1),
@@ -1236,7 +1231,7 @@ async def export_search_results(
                 "search_duration_seconds": round(search_duration, 3),
                 "timestamp": datetime.now().isoformat(),
                 "total_results": len(results),
-                "version": "0.8.1"
+                "version": "0.9.0"
             }
         
         # 确保输出目录存在
