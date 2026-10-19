@@ -272,6 +272,94 @@ class SearchEngine(ABC):
         pass
 
 
+class DeepSeekSearch(SearchEngine):
+    """DeepSeek in-house web search (POST https://api.deepseek.com/v1/tools/search).
+
+    Stable when Brave/Google/SearXNG are unavailable; keeps Playwright-based
+    read_url untouched for page fetching.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str = "https://api.deepseek.com/v1/tools/search",
+        proxy: Optional[str] = None,
+        client_pool: Optional[HttpClientPool] = None,
+    ):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.proxy = proxy
+        self._client_pool = client_pool
+
+    async def search(
+        self, query: str, num_results: int = 10
+    ) -> List[SearchResult]:
+        if not self.api_key:
+            logger.warning("DeepSeek search credentials not configured")
+            return []
+
+        payload = {
+            "query": query,
+            "count": max(1, min(int(num_results), 50)),
+            "need_content": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async def _request(proxy_url: Optional[str]):
+            if self._client_pool is not None:
+                client = await self._client_pool.get_client(proxy_url)
+                resp = await client.post(
+                    self.base_url, json=payload, headers=headers
+                )
+            else:
+                async with httpx.AsyncClient(
+                    timeout=30.0, proxy=proxy_url, trust_env=False
+                ) as client:
+                    resp = await client.post(
+                        self.base_url, json=payload, headers=headers
+                    )
+            if resp.status_code >= 400:
+                code = int(resp.status_code)
+                raise EngineSearchError(
+                    f"DeepSeek search HTTP error: {code}",
+                    retriable=bool(code >= 500 or code == 429),
+                    status_code=code,
+                )
+            return resp.json()
+
+        try:
+            data = await _request(self.proxy)
+        except EngineSearchError:
+            raise
+        except Exception as e:
+            if self.proxy:
+                try:
+                    data = await _request(self.proxy)
+                except Exception as e2:
+                    raise EngineSearchError(
+                        f"DeepSeek search failed: {e2}", retriable=True
+                    )
+            else:
+                raise EngineSearchError(
+                    f"DeepSeek search failed: {e}", retriable=True
+                )
+
+        results: List[SearchResult] = []
+        for item in data.get("results", []) or []:
+            results.append(
+                SearchResult(
+                    title=item.get("title", ""),
+                    link=item.get("url", ""),
+                    snippet=item.get("summary") or item.get("snippet", ""),
+                    source="deepseek",
+                )
+            )
+        return results
+
+
 class DuckDuckGoSearch(SearchEngine):
     def __init__(
         self,
@@ -1330,6 +1418,25 @@ class SearchManager:
 
         proxy_from_config = _extract_proxy(config) if config else None
 
+        # DeepSeek Search (preferred: stable in-house search API)
+        deepseek_config = config.get('deepseek', {})
+        deepseek_api_key = _resolve_secret(
+            deepseek_config.get('api_key'),
+            os.environ.get('DEEPSEEK_API_KEY'),
+        )
+        if deepseek_api_key:
+            deepseek_proxy = (
+                _extract_proxy(deepseek_config) or
+                _env_proxy_var('DEEPSEEK_PROXY') or
+                proxy_from_config
+            )
+            self.engines.insert(0, DeepSeekSearch(
+                api_key=deepseek_api_key,
+                proxy=deepseek_proxy,
+                client_pool=self.http_client_pool,
+            ))
+            logger.info("DeepSeek search engine initialized")
+
         # Brave Search
         brave_config = config.get('brave', {})
         brave_api_key = _resolve_secret(
@@ -1558,7 +1665,9 @@ class SearchManager:
             # 指定引擎模式
             for search_engine in self.engines + self.fallback_engines:
                 engine_name = search_engine.__class__.__name__.lower()
-                if engine_name.startswith('brave'):
+                if engine_name.startswith('deepseek'):
+                    engine_type = 'deepseek'
+                elif engine_name.startswith('brave'):
                     engine_type = 'brave'
                 elif engine_name.startswith('duckduckgo'):
                     engine_type = 'duckduckgo'
