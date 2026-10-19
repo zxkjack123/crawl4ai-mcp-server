@@ -26,7 +26,7 @@ except ImportError:
     from search import SearchManager
     from utils import rewrite_local_proxy_url, get_http_proxy_from_env
 
-mcp = FastMCP("Crawl4AI", host="0.0.0.0", port=8011)
+mcp = FastMCP("Crawl4AI", host="127.0.0.1", port=8011)
 
 crawler = None
 # Lazily-created proxied crawler (used as fallback when direct fetch fails)
